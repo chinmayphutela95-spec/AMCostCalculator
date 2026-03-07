@@ -186,9 +186,8 @@ function AutoCamera({ geometry, buildAxis, elevationMm }: { geometry: THREE.Buff
   return null
 }
 
-function StlScene({ geometry, buildAxis, overhangAngle, elevationMm }: {
+function StlScene({ geometry, overhangAngle, elevationMm }: {
   geometry: THREE.BufferGeometry
-  buildAxis: number
   overhangAngle: number
   elevationMm: number
 }) {
@@ -208,8 +207,8 @@ function StlScene({ geometry, buildAxis, overhangAngle, elevationMm }: {
       <ambientLight intensity={0.65} />
       <directionalLight position={[15, 25, 10]} intensity={1.2} castShadow />
       <directionalLight position={[-10, -5, -15]} intensity={0.25} />
-      <AutoCamera geometry={geometry} buildAxis={buildAxis} elevationMm={elevationMm} />
-      <OverhangMesh geometry={geometry} buildAxis={buildAxis} overhangAngle={overhangAngle} />
+      <AutoCamera geometry={geometry} buildAxis={1} elevationMm={elevationMm} />
+      <OverhangMesh geometry={geometry} buildAxis={1} overhangAngle={overhangAngle} />
       <BoundingBoxWire geometry={geometry} />
       <BuildPlatform geometry={geometry} elevationMm={elevationMm} />
       <Grid
@@ -280,13 +279,12 @@ export function PartStep({ state, update, onNext }: Props) {
   // Client overhang area % at 45° for the current geometry + axis — used for scaling
   const clientBase45Ref = useRef<number | null>(null)
 
-  const buildAxis = AXIS_MAP[state.buildDirection] ?? 2
-
-  // Keep baseline up-to-date whenever geometry or axis changes (no state update)
+  // Keep baseline up-to-date whenever geometry changes.
+  // Geometry is pre-rotated so build direction is always screen Y (axis=1).
   useEffect(() => {
     if (!threeGeo) return
-    clientBase45Ref.current = calcOverhangAreaPct(threeGeo, buildAxis, 45)
-  }, [threeGeo, buildAxis])
+    clientBase45Ref.current = calcOverhangAreaPct(threeGeo, 1, 45)
+  }, [threeGeo])
 
   // ── Server parse ──────────────────────────────────────────────────────────
   const parseOnServer = useCallback(async (file: File, direction: string) => {
@@ -314,11 +312,23 @@ export function PartStep({ state, update, onNext }: Props) {
   }, [update])
 
   // ── Load geometry into Three.js viewer ────────────────────────────────────
-  const loadViewer = useCallback((file: File) => {
+  // Pre-rotate so the chosen build axis always points up (screen Y).
+  // After this rotation all downstream components (plate, overhang, camera)
+  // can unconditionally treat Y as the build direction.
+  const loadViewer = useCallback((file: File, axis: number) => {
     const url = URL.createObjectURL(file)
     loaderRef.current.load(url, (geo: THREE.BufferGeometry) => {
       geo.computeVertexNormals()
       geo.center()
+      if (axis === 0) {
+        // X up → rotate -90° around Z so model +X becomes screen +Y
+        geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(-Math.PI / 2))
+      } else if (axis === 2) {
+        // Z up → rotate +90° around X so model +Z becomes screen +Y
+        geo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+      }
+      // Y up → no rotation needed (screen Y = model Y already)
+      geo.computeVertexNormals()
       geo.computeBoundingBox()
       setThreeGeo(geo)
       URL.revokeObjectURL(url)
@@ -330,31 +340,36 @@ export function PartStep({ state, update, onNext }: Props) {
     const file = files[0]
     if (!file) return
     fileRef.current = file
-    loadViewer(file)
+    loadViewer(file, AXIS_MAP[state.buildDirection])
     await parseOnServer(file, state.buildDirection)
   }, [state.buildDirection, parseOnServer, loadViewer])
 
-  // ── Auto re-parse when build direction changes ────────────────────────────
+  // ── Auto re-parse + re-orient viewer when build direction changes ──────────
   useEffect(() => {
     if (fileRef.current && state.partFileName) {
       parseOnServer(fileRef.current, state.buildDirection)
+      loadViewer(fileRef.current, AXIS_MAP[state.buildDirection])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.buildDirection])
 
   // ── Shared support recalc: overhang (angle-scaled) + elevation pillars ──
+  // Geometry is pre-rotated so overhang always uses axis=1 (Y).
+  // Elevation contribution is computed even without a loaded STL.
   const recomputeSupport = useCallback((angle: number, elevMm: number) => {
-    if (!threeGeo || state.partVolume <= 0 || state.partProjectedArea <= 0) return
-    const base = clientBase45Ref.current
+    if (state.partVolume <= 0 || state.partProjectedArea <= 0) return
     let scaledOverhangPct = serverPctRef.current
-    if (base != null && base > 0) {
-      const clientAtAngle = calcOverhangAreaPct(threeGeo, buildAxis, angle)
-      scaledOverhangPct = serverPctRef.current * (clientAtAngle / base)
+    if (threeGeo) {
+      const base = clientBase45Ref.current
+      if (base != null && base > 0) {
+        const clientAtAngle = calcOverhangAreaPct(threeGeo, 1, angle)
+        scaledOverhangPct = serverPctRef.current * (clientAtAngle / base)
+      }
     }
-    // Elevation pillars: projected_area × elevation height / part_volume (all cm)
+    // Elevation pillars: projected_area (cm²) × elevation (cm) / part_volume (cm³)
     const elevSupportPct = (state.partProjectedArea * (elevMm / 10)) / state.partVolume * 100
     update({ supportPctOfMass: Math.min((scaledOverhangPct + elevSupportPct) / 100, 0.80) })
-  }, [threeGeo, buildAxis, state.partVolume, state.partProjectedArea, update])
+  }, [threeGeo, state.partVolume, state.partProjectedArea, update])
 
   const handleAngleChange = useCallback((angle: number) => {
     setOverhangAngle(angle)
@@ -560,7 +575,6 @@ export function PartStep({ state, update, onNext }: Props) {
                 <Suspense fallback={null}>
                   <StlScene
                     geometry={threeGeo}
-                    buildAxis={buildAxis}
                     overhangAngle={overhangAngle}
                     elevationMm={state.elevationMm ?? 0}
                   />
