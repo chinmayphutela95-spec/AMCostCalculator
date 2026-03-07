@@ -212,6 +212,9 @@ export interface AnalysisState {
   // Recoating
   recoatingEfficiency: number  // 0.5–1.0; ignored when machine has distance+speed
 
+  // Packing override
+  partsPerBuildOverride?: number
+
   // Machine comparison
   compareIds?: number[]
   compareMachines?: Machine[]

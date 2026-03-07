@@ -118,6 +118,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     laser_strategy: state.laserStrategy,
     lasers_per_part: state.lasersPerPart,
     recoating_efficiency: state.recoatingEfficiency ?? 1.0,
+    parts_per_build_override: state.partsPerBuildOverride ?? null,
   })
 
   const runComparison = async () => {

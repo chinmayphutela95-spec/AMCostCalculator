@@ -294,6 +294,70 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
         </div>
       </div>
 
+      {/* Build Packing */}
+      {m && (() => {
+        const partFits = state.partHeight <= 0 || state.partHeight <= m.build_height
+        const suggestedLayers = m.packing_policy === '3D' && state.partHeight > 0
+          ? Math.floor(m.build_height / state.partHeight)
+          : 1
+        const perLayer = state.partProjectedArea > 0
+          ? Math.floor(m.build_area / state.partProjectedArea * m.packing_fraction)
+          : 1
+        const suggestedPpb = Math.max(1, perLayer * suggestedLayers)
+        const effective = state.partsPerBuildOverride ?? suggestedPpb
+
+        return (
+          <div>
+            <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Build Packing</h3>
+            {!partFits && (
+              <div className="card border-danger/40 bg-danger/5 mb-3 text-sm text-danger">
+                ⚠ Part height ({(state.partHeight * 10).toFixed(1)} mm) exceeds machine build height ({(m.build_height * 10).toFixed(0)} mm) — the part does not fit in this machine.
+              </div>
+            )}
+            <div className="card border-bg-border/50">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="text-text-primary text-sm font-medium">Suggested Parts per Build</div>
+                  <div className="text-text-muted text-xs mt-0.5">
+                    {m.packing_policy === '3D'
+                      ? `${suggestedLayers} layer${suggestedLayers !== 1 ? 's' : ''} × ${perLayer} per layer`
+                      : `${perLayer} per layer`}
+                    {' · '}{m.packing_policy} packing at {(m.packing_fraction * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-text-muted text-xs mb-0.5">{state.partsPerBuildOverride ? 'Overridden' : 'Auto'}</div>
+                  <div className={`font-mono font-bold text-2xl ${state.partsPerBuildOverride ? 'text-accent-purple' : 'text-accent-cyan'}`}>
+                    {effective}
+                  </div>
+                  {state.partsPerBuildOverride && (
+                    <div className="text-text-muted text-xs">auto: {suggestedPpb}</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="label">Override parts per build (optional)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" step="1" min="1"
+                    className="input-field flex-1"
+                    placeholder={`Auto: ${suggestedPpb}`}
+                    value={state.partsPerBuildOverride ?? ''}
+                    onChange={e => update({ partsPerBuildOverride: e.target.value === '' ? undefined : Math.max(1, +e.target.value) })}
+                  />
+                  {state.partsPerBuildOverride && (
+                    <button onClick={() => update({ partsPerBuildOverride: undefined })} className="btn-secondary text-xs px-3">Reset</button>
+                  )}
+                </div>
+                <p className="text-text-muted text-xs mt-1">
+                  Override if you can achieve better nesting by reorienting or manually arranging parts on the build plate.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       <div className="flex items-center justify-between pt-4 border-t border-bg-border">
         <button onClick={onBack} className="btn-secondary"><ChevronLeft size={16} /> Back</button>
         <button onClick={onNext} className="btn-primary">

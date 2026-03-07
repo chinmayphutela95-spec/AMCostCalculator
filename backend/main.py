@@ -149,6 +149,8 @@ class AnalysisRequest(BaseModel):
     lasers_per_part: int = 1         # how many lasers to engage (capped to machine.num_lasers)
     # Recoating
     recoating_efficiency: float = 1.0  # fallback fraction (1.0 = no overhead; 0.75 = 33% overhead)
+    # Packing override
+    parts_per_build_override: Optional[int] = None  # user-supplied override; bypasses auto packing calc
     # Overrides (optional - will use machine defaults if not provided)
     inert_gas_cost: Optional[float] = None
     consumable_cost_per_build: Optional[float] = None
@@ -222,6 +224,7 @@ def machine_to_cost_inputs(machine: models.Machine, req: AnalysisRequest) -> Cos
         recoating_distance_mm=getattr(machine, 'recoating_distance_mm', None),
         recoating_speed_mm_s=getattr(machine, 'recoating_speed_mm_s', None),
         recoating_efficiency=req.recoating_efficiency,
+        parts_per_build_override=req.parts_per_build_override,
         machine_cost=machine.machine_cost,
         machine_lifetime=machine.machine_lifetime,
         cost_of_capital=machine.cost_of_capital,
@@ -445,11 +448,12 @@ def calculate(req: AnalysisRequest, db: Session = Depends(get_db)):
             if req.material_build_rate is None:
                 req.material_build_rate = getattr(material, 'build_rate_cm3_hr', None)
 
-    inputs = machine_to_cost_inputs(machine, req)
-    result = calculate_cost(inputs)
-
-    # Also calculate quantity curve
-    curve = calculate_quantity_curve(inputs)
+    try:
+        inputs = machine_to_cost_inputs(machine, req)
+        result = calculate_cost(inputs)
+        curve = calculate_quantity_curve(inputs)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return {
         "result": result.to_dict(),

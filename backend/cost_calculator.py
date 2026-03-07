@@ -61,6 +61,9 @@ class CostInputs:
     # Multi-laser configuration
     laser_multiplier: int = 1   # effective lasers contributing to print speed (1 = single laser)
 
+    # User override: if set, skip packing calculation and use this value directly
+    parts_per_build_override: Optional[int] = None
+
     # Recoating parameters
     layer_thickness_um: float = 40.0              # µm — from material; needed for layer count
     recoating_distance_mm: Optional[float] = None # full chamber travel (end-to-end incl. margins)
@@ -208,17 +211,28 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     support_mass_per_part = inputs.support_pct_of_mass * inputs.part_mass  # kg
 
     # --- Step 0: Packing / Build Planning ---
-    if inputs.packing_policy == "3D":
-        layers = math.floor(inputs.build_height / inputs.part_height) if inputs.part_height > 0 else 1
-    else:
-        layers = 1
+    # Guard: part must physically fit inside the machine's build envelope
+    if inputs.part_height > 0 and inputs.part_height > inputs.build_height:
+        raise ValueError(
+            f"Part height ({inputs.part_height * 10:.1f} mm) exceeds machine build height "
+            f"({inputs.build_height * 10:.0f} mm). The part does not fit in this machine."
+        )
 
-    parts_per_layer = (
-        inputs.build_area / inputs.part_projected_area * inputs.packing_fraction
-        if inputs.part_projected_area > 0
-        else 1
-    )
-    parts_per_build = max(1, math.floor(layers * parts_per_layer))
+    if inputs.parts_per_build_override and inputs.parts_per_build_override > 0:
+        parts_per_build = inputs.parts_per_build_override
+    else:
+        if inputs.packing_policy == "3D":
+            layers = math.floor(inputs.build_height / inputs.part_height) if inputs.part_height > 0 else 1
+        else:
+            layers = 1
+
+        parts_per_layer = (
+            inputs.build_area / inputs.part_projected_area * inputs.packing_fraction
+            if inputs.part_projected_area > 0
+            else 1
+        )
+        parts_per_build = max(1, math.floor(layers * parts_per_layer))
+
     num_builds = math.ceil(inputs.production_run / parts_per_build)
 
     # --- Cost Category 1: Material ---
