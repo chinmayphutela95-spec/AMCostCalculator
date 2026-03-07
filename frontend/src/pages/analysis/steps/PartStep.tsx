@@ -11,14 +11,16 @@ import type { AnalysisState } from '../../../types'
 
 // ─── Three.js scene components ────────────────────────────────────────────────
 
-function OverhangMesh({ geometry, buildAxis, overhangAngle }: {
+function OverhangMesh({ geometry, buildAxis, overhangAngle, elevationMm }: {
   geometry: THREE.BufferGeometry
   buildAxis: number
   overhangAngle: number
+  elevationMm: number
 }) {
   const coloredGeo = useMemo(() => {
     const geo = geometry.clone()
     const normals = geo.attributes.normal as THREE.BufferAttribute
+    const pos = geo.attributes.position as THREE.BufferAttribute
     const count = geo.attributes.position.count
     const colors = new Float32Array(count * 3)
 
@@ -26,12 +28,22 @@ function OverhangMesh({ geometry, buildAxis, overhangAngle }: {
     buildVec[buildAxis] = 1.0
     const threshold = -Math.cos((overhangAngle * Math.PI) / 180)
 
+    // When sitting directly on the plate, the bottom face is supported — exclude it
+    geo.computeBoundingBox()
+    const minY = geo.boundingBox!.min.y
+    const eps = (geo.boundingBox!.max.y - minY) * 0.005
+
     for (let i = 0; i < count; i += 3) {
       const nx = normals.getX(i)
       const ny = normals.getY(i)
       const nz = normals.getZ(i)
       const dot = nx * buildVec[0] + ny * buildVec[1] + nz * buildVec[2]
-      const isOverhang = dot < threshold
+      let isOverhang = dot < threshold
+      // Bottom face touching the plate is plate-supported, not an overhang
+      if (isOverhang && elevationMm === 0) {
+        const y0 = pos.getY(i), y1 = pos.getY(i + 1), y2 = pos.getY(i + 2)
+        if (Math.min(y0, y1, y2) <= minY + eps) isOverhang = false
+      }
       const [r, g, b] = isOverhang ? [1.0, 0.3, 0.05] : [0.22, 0.52, 0.95]
       for (let v = 0; v < 3; v++) {
         colors[(i + v) * 3 + 0] = r
@@ -42,7 +54,7 @@ function OverhangMesh({ geometry, buildAxis, overhangAngle }: {
 
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     return geo
-  }, [geometry, buildAxis, overhangAngle])
+  }, [geometry, buildAxis, overhangAngle, elevationMm])
 
   return (
     <mesh geometry={coloredGeo} castShadow>
@@ -231,7 +243,7 @@ function StlScene({ geometry, overhangAngle, elevationMm }: {
       <directionalLight position={[15, 25, 10]} intensity={1.2} castShadow />
       <directionalLight position={[-10, -5, -15]} intensity={0.25} />
       <AutoCamera geometry={geometry} buildAxis={1} elevationMm={elevationMm} />
-      <OverhangMesh geometry={geometry} buildAxis={1} overhangAngle={overhangAngle} />
+      <OverhangMesh geometry={geometry} buildAxis={1} overhangAngle={overhangAngle} elevationMm={elevationMm} />
       <BoundingBoxWire geometry={geometry} />
       <BuildPlatform geometry={geometry} elevationMm={elevationMm} />
       <Grid
@@ -253,6 +265,7 @@ function calcOverhangAreaPct(
   geo: THREE.BufferGeometry,
   buildAxis: number,
   overhangAngle: number,
+  elevationMm = 0,
 ): number {
   const normals = geo.attributes.normal as THREE.BufferAttribute
   const pos = geo.attributes.position as THREE.BufferAttribute
@@ -260,6 +273,10 @@ function calcOverhangAreaPct(
   const buildVec = [0, 0, 0]
   buildVec[buildAxis] = 1.0
   const threshold = -Math.cos((overhangAngle * Math.PI) / 180)
+
+  geo.computeBoundingBox()
+  const minY = geo.boundingBox!.min.y
+  const eps = (geo.boundingBox!.max.y - minY) * 0.005
 
   let overhangArea = 0, totalArea = 0
   const v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3()
@@ -272,7 +289,11 @@ function calcOverhangAreaPct(
 
     const dot = normals.getX(i) * buildVec[0] + normals.getY(i) * buildVec[1] + normals.getZ(i) * buildVec[2]
     totalArea += area
-    if (dot < threshold) overhangArea += area
+    if (dot < threshold) {
+      // Exclude the plate-contact face when elevation = 0 (it's supported by the plate)
+      if (elevationMm === 0 && Math.min(v0.y, v1.y, v2.y) <= minY + eps) continue
+      overhangArea += area
+    }
   }
 
   return totalArea === 0 ? 0 : (overhangArea / totalArea) * 100
@@ -299,15 +320,6 @@ export function PartStep({ state, update, onNext }: Props) {
   const loaderRef = useRef(new STLLoader())
   // Server's estimated_support_pct (0–100) — source of truth for initial value
   const serverPctRef = useRef(0)
-  // Client overhang area % at 45° for the current geometry + axis — used for scaling
-  const clientBase45Ref = useRef<number | null>(null)
-
-  // Keep baseline up-to-date whenever geometry changes.
-  // Geometry is pre-rotated so build direction is always screen Y (axis=1).
-  useEffect(() => {
-    if (!threeGeo) return
-    clientBase45Ref.current = calcOverhangAreaPct(threeGeo, 1, 45)
-  }, [threeGeo])
 
   // ── Server parse ──────────────────────────────────────────────────────────
   const parseOnServer = useCallback(async (file: File, direction: string) => {
@@ -383,9 +395,9 @@ export function PartStep({ state, update, onNext }: Props) {
     if (state.partVolume <= 0 || state.partProjectedArea <= 0) return
     let scaledOverhangPct = serverPctRef.current
     if (threeGeo) {
-      const base = clientBase45Ref.current
-      if (base != null && base > 0) {
-        const clientAtAngle = calcOverhangAreaPct(threeGeo, 1, angle)
+      const base = calcOverhangAreaPct(threeGeo, 1, 45, elevMm)
+      if (base > 0) {
+        const clientAtAngle = calcOverhangAreaPct(threeGeo, 1, angle, elevMm)
         scaledOverhangPct = serverPctRef.current * (clientAtAngle / base)
       }
     }
