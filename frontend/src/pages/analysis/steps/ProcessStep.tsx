@@ -162,22 +162,37 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
         ) : (
           // Fallback: efficiency factor slider
           <div className="card border-bg-border/50">
-            <p className="text-text-muted text-xs mb-3">
-              No recoater parameters set for this machine. Use an efficiency factor to account for recoating overhead
-              (recoating = scan time × (1/efficiency − 1)).
-            </p>
+            <div className="flex items-start justify-between mb-3">
+              <p className="text-text-muted text-xs">
+                No recoater parameters set for this machine. Use an efficiency factor to account for recoating overhead
+                (recoating = scan time × (1/efficiency − 1)).
+              </p>
+              {Math.round((state.recoatingEfficiency ?? 0.75) * 100) !== 75 && (
+                <button
+                  onClick={() => update({ recoatingEfficiency: 0.75 })}
+                  className="ml-3 shrink-0 text-xs text-accent-cyan border border-accent-cyan/30 rounded px-2 py-0.5 hover:bg-accent-cyan/10 transition-colors"
+                >
+                  Reset to 75%
+                </button>
+              )}
+            </div>
             <div className="flex items-end gap-6">
               <div className="flex-1">
-                <label className="label">Recoating Efficiency</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label mb-0">Recoating Efficiency</label>
+                  <span className="text-xs text-text-muted">
+                    Recommended: <span className="text-accent-cyan font-medium">75%</span>
+                  </span>
+                </div>
                 <div className="flex items-center gap-3 mt-1">
                   <input
                     type="range" min={50} max={100} step={1}
-                    value={Math.round((state.recoatingEfficiency ?? 1.0) * 100)}
+                    value={Math.round((state.recoatingEfficiency ?? 0.75) * 100)}
                     onChange={e => update({ recoatingEfficiency: +e.target.value / 100 })}
                     className="flex-1"
                   />
                   <span className="text-accent-cyan font-mono font-bold text-lg w-12 text-center">
-                    {Math.round((state.recoatingEfficiency ?? 1.0) * 100)}%
+                    {Math.round((state.recoatingEfficiency ?? 0.75) * 100)}%
                   </span>
                 </div>
                 <div className="flex justify-between text-text-muted text-xs mt-0.5">
@@ -188,8 +203,8 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
               <div className="text-right shrink-0">
                 <div className="text-text-muted text-xs mb-0.5">Recoating adds</div>
                 <div className="text-accent-cyan font-mono font-bold text-lg">
-                  {(state.recoatingEfficiency ?? 1.0) < 1.0
-                    ? `+${((1 / (state.recoatingEfficiency ?? 1.0) - 1) * 100).toFixed(0)}%`
+                  {(state.recoatingEfficiency ?? 0.75) < 1.0
+                    ? `+${((1 / (state.recoatingEfficiency ?? 0.75) - 1) * 100).toFixed(0)}%`
                     : 'None'}
                 </div>
                 <div className="text-text-muted text-xs">to print time</div>

@@ -40,7 +40,7 @@ const INITIAL: AnalysisState = {
   layerThicknessUm: 40,
   laserStrategy: 'single' as const,
   lasersPerPart: 1,
-  recoatingEfficiency: 1.0,
+  recoatingEfficiency: 0.75,
 }
 
 export function AnalysisWizard() {
