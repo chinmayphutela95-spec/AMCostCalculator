@@ -35,6 +35,7 @@ const INITIAL: AnalysisState = {
   surfaceTreatmentCostPerPart: 30,
   ndtEnabled: false,
   ndtCostPerPart: 50,
+  elevationMm: 0,
   materialBuildRate: 15,
   layerThicknessUm: 40,
   laserStrategy: 'single' as const,

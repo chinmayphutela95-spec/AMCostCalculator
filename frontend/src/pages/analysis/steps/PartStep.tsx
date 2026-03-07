@@ -99,8 +99,58 @@ function BoundingBoxWire({ geometry }: { geometry: THREE.BufferGeometry }) {
   )
 }
 
-/** Positions and orients camera based on mesh + build axis; resets on axis change */
-function AutoCamera({ geometry, buildAxis }: { geometry: THREE.BufferGeometry; buildAxis: number }) {
+/** Build plate + elevation gap visual */
+function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeometry; elevationMm: number }) {
+  const { partBottomY, size, centerX, centerZ } = useMemo(() => {
+    geometry.computeBoundingBox()
+    const box = geometry.boundingBox!
+    const s = new THREE.Vector3(); box.getSize(s)
+    const c = new THREE.Vector3(); box.getCenter(c)
+    return { partBottomY: box.min.y, size: s, centerX: c.x, centerZ: c.z }
+  }, [geometry])
+
+  const plateY = partBottomY - elevationMm
+  const plateH = Math.max(size.x, size.z) * 0.035
+  const plateSize = Math.max(size.x, size.z) * 2.4
+
+  const labelStyle: React.CSSProperties = {
+    color: '#f59e0b',
+    fontSize: '10px',
+    whiteSpace: 'nowrap',
+    background: 'rgba(6,18,40,0.88)',
+    padding: '2px 6px',
+    borderRadius: 3,
+    border: '1px solid rgba(245,158,11,0.4)',
+    fontFamily: 'monospace',
+    pointerEvents: 'none',
+    userSelect: 'none',
+  }
+
+  return (
+    <>
+      {/* Build plate surface */}
+      <mesh position={[centerX, plateY - plateH / 2, centerZ]} receiveShadow>
+        <boxGeometry args={[plateSize, plateH, plateSize]} />
+        <meshStandardMaterial color="#1b2a4a" metalness={0.75} roughness={0.25} />
+      </mesh>
+      {/* Elevation gap: amber support-pillar volume */}
+      {elevationMm > 1 && (
+        <>
+          <mesh position={[centerX, plateY + elevationMm / 2, centerZ]}>
+            <boxGeometry args={[size.x * 0.88, elevationMm, size.z * 0.88]} />
+            <meshStandardMaterial color="#f59e0b" opacity={0.13} transparent depthWrite={false} />
+          </mesh>
+          <Html position={[centerX + size.x * 0.62, plateY + elevationMm / 2, centerZ]} center>
+            <div style={labelStyle}>↕ {elevationMm.toFixed(0)} mm</div>
+          </Html>
+        </>
+      )}
+    </>
+  )
+}
+
+/** Positions and orients camera based on mesh + build axis + elevation; resets on change */
+function AutoCamera({ geometry, buildAxis, elevationMm }: { geometry: THREE.BufferGeometry; buildAxis: number; elevationMm: number }) {
   const { camera, controls } = useThree()
 
   useEffect(() => {
@@ -108,14 +158,17 @@ function AutoCamera({ geometry, buildAxis }: { geometry: THREE.BufferGeometry; b
     const box = geometry.boundingBox!
     const size = new THREE.Vector3(); box.getSize(size)
     const center = new THREE.Vector3(); box.getCenter(center)
-    const maxDim = Math.max(size.x, size.y, size.z)
-    const dist = maxDim * 2.2
 
-    // Camera position tuned per build axis so the "up" face is visible
+    // Shift center down so camera frames both part and elevated platform
+    center.y -= elevationMm / 2
+    const totalHeight = size.y + elevationMm
+    const maxDim = Math.max(size.x, size.z, totalHeight)
+    const dist = maxDim * 2.5
+
     const positions: [number, number, number][] = [
-      [center.x + dist, center.y + dist * 0.3, center.z + dist * 0.5],      // X up
-      [center.x + dist * 0.4, center.y + dist, center.z + dist * 0.4],      // Y up
-      [center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist],      // Z up
+      [center.x + dist, center.y + dist * 0.3, center.z + dist * 0.5],
+      [center.x + dist * 0.4, center.y + dist, center.z + dist * 0.4],
+      [center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist],
     ]
     const [px, py, pz] = positions[buildAxis] ?? positions[2]
 
@@ -123,44 +176,45 @@ function AutoCamera({ geometry, buildAxis }: { geometry: THREE.BufferGeometry; b
     camera.lookAt(center)
     camera.updateProjectionMatrix()
 
-    // Reset OrbitControls target so it orbits around mesh center
     const ctrl = controls as any
     if (ctrl?.target) {
       ctrl.target.set(center.x, center.y, center.z)
       ctrl.update?.()
     }
-  }, [geometry, buildAxis, camera, controls])
+  }, [geometry, buildAxis, elevationMm, camera, controls])
 
   return null
 }
 
-function StlScene({ geometry, buildAxis, overhangAngle }: {
+function StlScene({ geometry, buildAxis, overhangAngle, elevationMm }: {
   geometry: THREE.BufferGeometry
   buildAxis: number
   overhangAngle: number
+  elevationMm: number
 }) {
-  const gridY = useMemo(() => {
+  const { platformY, gridSize } = useMemo(() => {
     geometry.computeBoundingBox()
-    return (geometry.boundingBox?.min.y ?? 0) - 0.5
-  }, [geometry])
-
-  const gridSize = useMemo(() => {
-    const s = new THREE.Vector3()
-    geometry.boundingBox?.getSize(s)
-    return Math.max(s.x, s.y, s.z) * 4
-  }, [geometry])
+    const box = geometry.boundingBox!
+    const s = new THREE.Vector3(); box.getSize(s)
+    const plateH = Math.max(s.x, s.z) * 0.035
+    return {
+      platformY: (box.min.y ?? 0) - elevationMm - plateH,
+      gridSize: Math.max(s.x, s.y, s.z, elevationMm) * 4,
+    }
+  }, [geometry, elevationMm])
 
   return (
     <>
       <ambientLight intensity={0.65} />
       <directionalLight position={[15, 25, 10]} intensity={1.2} castShadow />
       <directionalLight position={[-10, -5, -15]} intensity={0.25} />
-      <AutoCamera geometry={geometry} buildAxis={buildAxis} />
+      <AutoCamera geometry={geometry} buildAxis={buildAxis} elevationMm={elevationMm} />
       <OverhangMesh geometry={geometry} buildAxis={buildAxis} overhangAngle={overhangAngle} />
       <BoundingBoxWire geometry={geometry} />
+      <BuildPlatform geometry={geometry} elevationMm={elevationMm} />
       <Grid
         args={[gridSize, gridSize]}
-        position={[0, gridY, 0]}
+        position={[0, platformY, 0]}
         cellColor="#1e2a45"
         sectionColor="#2d3142"
         fadeDistance={gridSize * 1.5}
@@ -288,18 +342,30 @@ export function PartStep({ state, update, onNext }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.buildDirection])
 
-  // ── Handle overhang angle change — scale support % from server baseline ──
-  const handleAngleChange = useCallback((angle: number) => {
-    setOverhangAngle(angle)
-    if (!threeGeo) return
+  // ── Shared support recalc: overhang (angle-scaled) + elevation pillars ──
+  const recomputeSupport = useCallback((angle: number, elevMm: number) => {
+    if (!threeGeo || state.partVolume <= 0 || state.partProjectedArea <= 0) return
     const base = clientBase45Ref.current
+    let scaledOverhangPct = serverPctRef.current
     if (base != null && base > 0) {
       const clientAtAngle = calcOverhangAreaPct(threeGeo, buildAxis, angle)
-      const ratio = clientAtAngle / base
-      const newPct = Math.min(serverPctRef.current * ratio, 50) // cap at 50%
-      update({ supportPctOfMass: newPct / 100 })
+      scaledOverhangPct = serverPctRef.current * (clientAtAngle / base)
     }
-  }, [threeGeo, buildAxis, update])
+    // Elevation pillars: projected_area × elevation height / part_volume (all cm)
+    const elevSupportPct = (state.partProjectedArea * (elevMm / 10)) / state.partVolume * 100
+    update({ supportPctOfMass: Math.min((scaledOverhangPct + elevSupportPct) / 100, 0.80) })
+  }, [threeGeo, buildAxis, state.partVolume, state.partProjectedArea, update])
+
+  const handleAngleChange = useCallback((angle: number) => {
+    setOverhangAngle(angle)
+    recomputeSupport(angle, state.elevationMm ?? 0)
+  }, [recomputeSupport, state.elevationMm])
+
+  const handleElevationChange = useCallback((elevMm: number) => {
+    const clamped = Math.max(0, elevMm)
+    update({ elevationMm: clamped })
+    recomputeSupport(overhangAngle, clamped)
+  }, [recomputeSupport, overhangAngle, update])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -380,6 +446,24 @@ export function PartStep({ state, update, onNext }: Props) {
                 <Info size={11} /> Changing orientation auto-refreshes geometry, viewer, and support estimate
               </p>
             )}
+          </div>
+
+          {/* Elevation above build plate */}
+          <div>
+            <label className="label">Elevation above build plate</label>
+            <div className="relative">
+              <input
+                type="number" step="1" min="0" className="input-field pr-10"
+                value={state.elevationMm ?? 0}
+                onChange={e => handleElevationChange(Math.max(0, +e.target.value))}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">mm</span>
+            </div>
+            <p className="text-text-muted text-xs mt-1">
+              {(state.elevationMm ?? 0) === 0
+                ? 'Part fused directly to plate — no elevation support needed.'
+                : `Bottom face floats ${state.elevationMm} mm above plate — full projected-area support pillar added to estimate.`}
+            </p>
           </div>
 
           {/* Overhang angle — only shown after file upload */}
@@ -478,6 +562,7 @@ export function PartStep({ state, update, onNext }: Props) {
                     geometry={threeGeo}
                     buildAxis={buildAxis}
                     overhangAngle={overhangAngle}
+                    elevationMm={state.elevationMm ?? 0}
                   />
                 </Suspense>
               </Canvas>

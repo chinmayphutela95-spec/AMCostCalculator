@@ -198,6 +198,9 @@ export interface AnalysisState {
   ndtEnabled: boolean
   ndtCostPerPart: number
 
+  // Part setup
+  elevationMm: number  // height of part bottom above build plate (0 = fused to plate)
+
   // Material process params
   materialBuildRate: number
   layerThicknessUm: number
