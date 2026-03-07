@@ -244,6 +244,29 @@ export function MachinesPage() {
                 </div>
               </div>
 
+              {/* Recoater */}
+              <div>
+                <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Recoater Configuration (optional)</h3>
+                <p className="text-text-muted text-xs mb-3">
+                  When set, recoating time is calculated from first principles: <span className="font-mono">recoat_time = distance / speed</span> per layer.
+                  Leave blank to use a recoating efficiency factor in the analysis wizard instead.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <NumField
+                    label="Chamber Travel Distance (mm)"
+                    value={editing.recoating_distance_mm ?? ''}
+                    onChange={(v) => set('recoating_distance_mm', v || null)}
+                    note="Full end-to-end distance incl. margins (e.g. 250 for Aconity Midi+)"
+                  />
+                  <NumField
+                    label="Recoater Speed (mm/s)"
+                    value={editing.recoating_speed_mm_s ?? ''}
+                    onChange={(v) => set('recoating_speed_mm_s', v || null)}
+                    note="Average speed across the full stroke"
+                  />
+                </div>
+              </div>
+
               {/* Notes */}
               <div>
                 <label className="label">Notes</label>

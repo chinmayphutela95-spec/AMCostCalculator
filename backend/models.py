@@ -18,6 +18,9 @@ class Machine(Base):
     build_area = Column(Float, default=490.87)            # cm²
     build_rate = Column(Float, default=10.0)              # cm³/hr fallback (overridden by material)
     num_lasers = Column(Integer, default=1)               # number of laser beams
+    # Recoater parameters (optional — for first-principles recoating time calculation)
+    recoating_distance_mm = Column(Float, nullable=True)  # mm — full chamber travel (end-to-end incl. margins)
+    recoating_speed_mm_s = Column(Float, nullable=True)   # mm/s — average recoater speed
     # Machine economics
     machine_cost = Column(Float, default=500000.0)        # $
     machine_lifetime = Column(Float, default=7.0)         # years

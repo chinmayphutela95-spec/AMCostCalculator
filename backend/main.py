@@ -25,6 +25,8 @@ Base.metadata.create_all(bind=engine)
 def _run_migrations():
     stmts = [
         "ALTER TABLE machines ADD COLUMN num_lasers INTEGER DEFAULT 1",
+        "ALTER TABLE machines ADD COLUMN recoating_distance_mm REAL",
+        "ALTER TABLE machines ADD COLUMN recoating_speed_mm_s REAL",
         "ALTER TABLE materials ADD COLUMN layer_thickness_um REAL DEFAULT 40.0",
         "ALTER TABLE materials ADD COLUMN build_rate_cm3_hr REAL DEFAULT 10.0",
     ]
@@ -76,6 +78,8 @@ class MachineCreate(BaseModel):
     build_area: float = 490.87
     build_rate: float = 10.0           # fallback build rate (cm³/hr)
     num_lasers: int = 1                # number of laser beams in the machine
+    recoating_distance_mm: Optional[float] = None  # full chamber travel length (mm)
+    recoating_speed_mm_s: Optional[float] = None   # average recoater speed (mm/s)
     machine_cost: float = 500000.0
     machine_lifetime: float = 7.0
     cost_of_capital: float = 0.05
@@ -143,6 +147,8 @@ class AnalysisRequest(BaseModel):
     # Multi-laser configuration
     laser_strategy: str = "single"   # "single" | "multi_per_part" | "multi_zones"
     lasers_per_part: int = 1         # how many lasers to engage (capped to machine.num_lasers)
+    # Recoating
+    recoating_efficiency: float = 1.0  # fallback fraction (1.0 = no overhead; 0.75 = 33% overhead)
     # Overrides (optional - will use machine defaults if not provided)
     inert_gas_cost: Optional[float] = None
     consumable_cost_per_build: Optional[float] = None
@@ -212,6 +218,10 @@ def machine_to_cost_inputs(machine: models.Machine, req: AnalysisRequest) -> Cos
         part_projected_area=req.part_projected_area,
         support_pct_of_mass=req.support_pct_of_mass,
         production_run=req.production_run,
+        layer_thickness_um=req.layer_thickness_um or 40.0,
+        recoating_distance_mm=getattr(machine, 'recoating_distance_mm', None),
+        recoating_speed_mm_s=getattr(machine, 'recoating_speed_mm_s', None),
+        recoating_efficiency=req.recoating_efficiency,
         machine_cost=machine.machine_cost,
         machine_lifetime=machine.machine_lifetime,
         cost_of_capital=machine.cost_of_capital,

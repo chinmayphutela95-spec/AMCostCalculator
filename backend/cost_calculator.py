@@ -61,6 +61,13 @@ class CostInputs:
     # Multi-laser configuration
     laser_multiplier: int = 1   # effective lasers contributing to print speed (1 = single laser)
 
+    # Recoating parameters
+    layer_thickness_um: float = 40.0              # µm — from material; needed for layer count
+    recoating_distance_mm: Optional[float] = None # full chamber travel (end-to-end incl. margins)
+    recoating_speed_mm_s: Optional[float] = None  # average recoater speed (mm/s)
+    recoating_efficiency: float = 1.0             # fallback: fraction of active time that is laser scan
+                                                  # (e.g. 0.75 → 33% overhead; ignored when distance+speed set)
+
     # Metal AM extensions (optional)
     heat_treatment_enabled: bool = False
     heat_treatment_cost_per_build: float = 0.0
@@ -101,7 +108,9 @@ class CostBreakdown:
     operating_hours_per_year: float   # hr/yr
     machine_cost_per_hour: float      # $/hr
     total_warmup_time: float          # hr
-    total_print_time: float           # hr
+    total_scan_time: float            # hr — laser scan only
+    total_recoating_time: float       # hr — recoating overhead
+    total_print_time: float           # hr — scan + recoating (used for machine/gas/labor cost)
     total_cooldown_time: float        # hr
     total_build_exchange_time: float  # hr
     total_machine_time: float         # hr
@@ -156,6 +165,8 @@ class CostBreakdown:
                 "annual_maintenance": self.annual_maintenance,
                 "machine_cost_per_hour": self.machine_cost_per_hour,
                 "total_warmup_hr": self.total_warmup_time,
+                "total_scan_hr": self.total_scan_time,
+                "total_recoating_hr": self.total_recoating_time,
                 "total_print_hr": self.total_print_time,
                 "total_cooldown_hr": self.total_cooldown_time,
                 "total_build_exchange_hr": self.total_build_exchange_time,
@@ -251,13 +262,29 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     )
 
     total_warmup_time = num_builds * inputs.warmup_time
+
     # Effective build rate scales with number of laser beams engaged
     effective_build_rate = inputs.build_rate * max(1, inputs.laser_multiplier)
-    total_print_time = (
+    total_scan_time = (
         inputs.production_run * inputs.part_volume / effective_build_rate
         if effective_build_rate > 0
         else 0
     )
+
+    # Recoating time — from first principles if distance+speed are set, else efficiency fallback
+    if inputs.recoating_distance_mm and inputs.recoating_speed_mm_s and inputs.recoating_speed_mm_s > 0:
+        recoat_time_per_layer_hr = inputs.recoating_distance_mm / inputs.recoating_speed_mm_s / 3600
+        layer_thickness_cm = inputs.layer_thickness_um / 10000 if inputs.layer_thickness_um > 0 else 0.004
+        num_layers = math.ceil(inputs.part_height / layer_thickness_cm) if layer_thickness_cm > 0 else 0
+        total_recoating_time = num_builds * num_layers * recoat_time_per_layer_hr
+    elif inputs.recoating_efficiency < 1.0 and inputs.recoating_efficiency > 0:
+        # efficiency fraction: scan_time / total_active_time
+        # → total_active_time = scan_time / efficiency → recoating = scan_time * (1/efficiency - 1)
+        total_recoating_time = total_scan_time * (1.0 / inputs.recoating_efficiency - 1.0)
+    else:
+        total_recoating_time = 0.0
+
+    total_print_time = total_scan_time + total_recoating_time
     total_cooldown_time = num_builds * inputs.cooldown_time
     total_build_exchange_time = num_builds * (
         inputs.setup_time_per_build + inputs.removal_time_per_build
@@ -354,6 +381,8 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
         operating_hours_per_year=operating_hours_per_year,
         machine_cost_per_hour=machine_cost_per_hour,
         total_warmup_time=total_warmup_time,
+        total_scan_time=total_scan_time,
+        total_recoating_time=total_recoating_time,
         total_print_time=total_print_time,
         total_cooldown_time=total_cooldown_time,
         total_build_exchange_time=total_build_exchange_time,

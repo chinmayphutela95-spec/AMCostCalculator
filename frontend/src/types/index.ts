@@ -11,6 +11,8 @@ export interface Machine {
   build_area: number
   build_rate: number
   num_lasers: number
+  recoating_distance_mm?: number
+  recoating_speed_mm_s?: number
   machine_cost: number
   machine_lifetime: number
   cost_of_capital: number
@@ -102,6 +104,8 @@ export interface CostResult {
     annual_maintenance: number
     machine_cost_per_hour: number
     total_warmup_hr: number
+    total_scan_hr: number
+    total_recoating_hr: number
     total_print_hr: number
     total_cooldown_hr: number
     total_build_exchange_hr: number
@@ -201,6 +205,9 @@ export interface AnalysisState {
   // Laser configuration
   laserStrategy: 'single' | 'multi_per_part' | 'multi_zones'
   lasersPerPart: number
+
+  // Recoating
+  recoatingEfficiency: number  // 0.5–1.0; ignored when machine has distance+speed
 
   // Machine comparison
   compareIds?: number[]

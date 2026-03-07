@@ -129,6 +129,76 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
         </div>
       )}
 
+      {/* Recoating */}
+      <div>
+        <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Recoating Time</h3>
+        {m && m.recoating_distance_mm && m.recoating_speed_mm_s ? (
+          // First-principles: machine has distance + speed configured
+          <div className="card border-accent-cyan/20 bg-accent-cyan/5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-accent-cyan text-xs font-semibold uppercase tracking-wide">First-Principles Calculation Active</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              <div>
+                <div className="text-text-muted">Chamber travel</div>
+                <div className="text-text-primary font-mono font-medium">{m.recoating_distance_mm} mm</div>
+              </div>
+              <div>
+                <div className="text-text-muted">Recoater speed</div>
+                <div className="text-text-primary font-mono font-medium">{m.recoating_speed_mm_s} mm/s</div>
+              </div>
+              <div>
+                <div className="text-text-muted">Time per layer</div>
+                <div className="text-accent-cyan font-mono font-medium">
+                  {((m.recoating_distance_mm / m.recoating_speed_mm_s)).toFixed(1)} s
+                </div>
+              </div>
+            </div>
+            <p className="text-text-muted text-xs mt-2">
+              Recoating overhead is computed per build from layer count × time per layer.
+              To override, update the machine's recoater configuration.
+            </p>
+          </div>
+        ) : (
+          // Fallback: efficiency factor slider
+          <div className="card border-bg-border/50">
+            <p className="text-text-muted text-xs mb-3">
+              No recoater parameters set for this machine. Use an efficiency factor to account for recoating overhead
+              (recoating = scan time × (1/efficiency − 1)).
+            </p>
+            <div className="flex items-end gap-6">
+              <div className="flex-1">
+                <label className="label">Recoating Efficiency</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input
+                    type="range" min={50} max={100} step={1}
+                    value={Math.round((state.recoatingEfficiency ?? 1.0) * 100)}
+                    onChange={e => update({ recoatingEfficiency: +e.target.value / 100 })}
+                    className="flex-1"
+                  />
+                  <span className="text-accent-cyan font-mono font-bold text-lg w-12 text-center">
+                    {Math.round((state.recoatingEfficiency ?? 1.0) * 100)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-text-muted text-xs mt-0.5">
+                  <span>50% (heavy overhead)</span>
+                  <span>100% (no overhead)</span>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-text-muted text-xs mb-0.5">Recoating adds</div>
+                <div className="text-accent-cyan font-mono font-bold text-lg">
+                  {(state.recoatingEfficiency ?? 1.0) < 1.0
+                    ? `+${((1 / (state.recoatingEfficiency ?? 1.0) - 1) * 100).toFixed(0)}%`
+                    : 'None'}
+                </div>
+                <div className="text-text-muted text-xs">to print time</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Overrides */}
       <div>
         <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Override Machine Defaults (optional)</h3>

@@ -77,6 +77,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
         layer_thickness_um: state.layerThicknessUm,
         laser_strategy: state.laserStrategy,
         lasers_per_part: state.lasersPerPart,
+        recoating_efficiency: state.recoatingEfficiency ?? 1.0,
       }
       const data = await analysisApi.calculate(payload)
       update({ result: data.result, quantityCurve: data.quantity_curve })
@@ -116,6 +117,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     layer_thickness_um: state.layerThicknessUm,
     laser_strategy: state.laserStrategy,
     lasers_per_part: state.lasersPerPart,
+    recoating_efficiency: state.recoatingEfficiency ?? 1.0,
   })
 
   const runComparison = async () => {
