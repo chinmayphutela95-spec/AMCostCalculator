@@ -110,8 +110,10 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
   }, [geometry])
 
   const plateY = partBottomY - elevationMm
-  const plateH = Math.max(size.x, size.z) * 0.035
+  const plateH = Math.max(size.x, size.z) * 0.012  // thin slab
   const plateSize = Math.max(size.x, size.z) * 2.4
+  const cellSize = Math.max(size.x, size.z) * 0.12
+  const sectionSize = Math.max(size.x, size.z) * 0.6
 
   const labelStyle: React.CSSProperties = {
     color: '#f59e0b',
@@ -128,11 +130,32 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
 
   return (
     <>
-      {/* Build plate surface */}
-      <mesh position={[centerX, plateY - plateH / 2, centerZ]} receiveShadow>
+      {/* Build plate: translucent thin slab for depth cue */}
+      <mesh position={[centerX, plateY - plateH / 2, centerZ]}>
         <boxGeometry args={[plateSize, plateH, plateSize]} />
-        <meshStandardMaterial color="#1b2a4a" metalness={0.75} roughness={0.25} />
+        <meshStandardMaterial
+          color="#1b3a6e"
+          metalness={0.5}
+          roughness={0.4}
+          opacity={0.18}
+          transparent
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
       </mesh>
+      {/* Build plate: grid surface — visible from top and bottom */}
+      <Grid
+        args={[plateSize, plateSize]}
+        position={[centerX, plateY, centerZ]}
+        cellSize={cellSize}
+        cellThickness={0.6}
+        cellColor="#2a4a7a"
+        sectionSize={sectionSize}
+        sectionThickness={1.2}
+        sectionColor="#4a80cc"
+        fadeDistance={plateSize}
+        fadeStrength={1.5}
+      />
       {/* Elevation gap: amber support-pillar volume */}
       {elevationMm > 1 && (
         <>
