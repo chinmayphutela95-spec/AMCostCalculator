@@ -994,9 +994,14 @@ def export_to_pdf(
             ]))
             return tbl
 
-        def _chart_img(png_bytes, target_w, fw, fh):
-            """Place chart PNG maintaining its original aspect ratio."""
-            target_h = target_w * (fh / fw)
+        def _chart_img(png_bytes, target_w, fw=None, fh=None):
+            """Place chart PNG maintaining its original aspect ratio.
+            Reads actual pixel dimensions from the PNG header so tight_layout
+            adjustments don't cause stretching."""
+            import struct
+            px_w = struct.unpack(">I", png_bytes[16:20])[0]
+            px_h = struct.unpack(">I", png_bytes[20:24])[0]
+            target_h = target_w * (px_h / px_w) if px_w else target_w * 0.5
             return RLImage(io.BytesIO(png_bytes), width=target_w, height=target_h)
 
         # ── Per-page footer (page number + acknowledgment) ────────────────────
