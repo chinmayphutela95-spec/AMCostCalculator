@@ -197,6 +197,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
       material_build_rate_cm3_hr: state.materialBuildRate,
       // Part geometry
       part_file_name: state.partFileName,
+      part_file_path: state.geometry?.file_path,
       part_volume_cm3: state.partVolume,
       part_height_cm: state.partHeight,
       part_projected_area_cm2: state.partProjectedArea,

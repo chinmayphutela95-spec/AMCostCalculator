@@ -169,6 +169,174 @@ def _make_line_chart(quantity_curve, current_qty=None, figsize=(9, 3.8)):
     return buf.read()
 
 
+# ─── STL 3-D snapshot ─────────────────────────────────────────────────────────
+
+def _render_stl_snapshot(
+    file_path: str,
+    build_direction: str = "z",
+    overhang_angle: float = 45.0,
+    figsize=(9.0, 4.2),
+) -> Optional[bytes]:
+    """Render STL as a 3-D matplotlib snapshot with overhang highlighting.
+
+    Returns PNG bytes or None if the file is missing / rendering fails.
+    """
+    try:
+        import sys, types, math
+
+        # trimesh may need a networkx stub on minimal installs
+        try:
+            import networkx  # noqa: F401
+        except ModuleNotFoundError:
+            _nx = types.ModuleType("networkx")
+            sys.modules["networkx"] = _nx
+
+        import trimesh
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        from matplotlib.patches import Patch
+
+        if not os.path.exists(file_path):
+            return None
+
+        # ── Load mesh ─────────────────────────────────────────────────────────
+        loaded = trimesh.load(file_path, force="mesh")
+        if isinstance(loaded, trimesh.Scene):
+            geoms = list(loaded.geometry.values())
+            if not geoms:
+                return None
+            mesh = trimesh.util.concatenate(geoms) if len(geoms) > 1 else geoms[0]
+        else:
+            mesh = loaded
+
+        if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
+            return None
+
+        # ── Overhang detection ────────────────────────────────────────────────
+        axis_map = {"x": 0, "y": 1, "z": 2}
+        build_axis = axis_map.get(build_direction.lower(), 2)
+        build_vec = np.zeros(3)
+        build_vec[build_axis] = 1.0
+
+        verts   = np.asarray(mesh.vertices, dtype=float)
+        faces   = np.asarray(mesh.faces,    dtype=int)
+        normals = np.asarray(mesh.face_normals, dtype=float)
+        dots    = normals @ build_vec
+        threshold    = -math.cos(math.radians(overhang_angle))
+        is_overhang  = dots < threshold
+
+        normal_faces   = faces[~is_overhang]
+        overhang_faces = faces[is_overhang]
+
+        # Sub-sample for rendering performance (matplotlib painter's limit)
+        RENDER_LIMIT = 4000
+        rng = np.random.default_rng(42)
+
+        def _sub(fa, n):
+            if len(fa) <= n:
+                return fa
+            return fa[rng.choice(len(fa), n, replace=False)]
+
+        normal_r   = _sub(normal_faces,   RENDER_LIMIT)
+        overhang_r = _sub(overhang_faces, min(RENDER_LIMIT, max(1, len(overhang_faces))))
+
+        # ── Bounding box ──────────────────────────────────────────────────────
+        mins    = verts.min(axis=0)
+        maxs    = verts.max(axis=0)
+        extents = maxs - mins
+        corners = np.array([
+            [mins[0], mins[1], mins[2]], [maxs[0], mins[1], mins[2]],
+            [maxs[0], maxs[1], mins[2]], [mins[0], maxs[1], mins[2]],
+            [mins[0], mins[1], maxs[2]], [maxs[0], mins[1], maxs[2]],
+            [maxs[0], maxs[1], maxs[2]], [mins[0], maxs[1], maxs[2]],
+        ])
+        bbox_edges = [
+            (0,1),(1,2),(2,3),(3,0),
+            (4,5),(5,6),(6,7),(7,4),
+            (0,4),(1,5),(2,6),(3,7),
+        ]
+
+        # ── Figure ────────────────────────────────────────────────────────────
+        fig = plt.figure(figsize=figsize, facecolor="#0f1623")
+        ax  = fig.add_subplot(111, projection="3d")
+        ax.set_facecolor("#0f1623")
+
+        if len(normal_r) > 0:
+            pc = Poly3DCollection(verts[normal_r], alpha=0.72, linewidths=0)
+            pc.set_facecolor("#3b82f6")
+            ax.add_collection3d(pc)
+
+        if len(overhang_r) > 0:
+            pc2 = Poly3DCollection(verts[overhang_r], alpha=0.90, linewidths=0)
+            pc2.set_facecolor("#ef4444")
+            ax.add_collection3d(pc2)
+
+        for a, b in bbox_edges:
+            ax.plot3D(*zip(corners[a], corners[b]),
+                      color="#f59e0b", linewidth=0.7, linestyle="--", alpha=0.75)
+
+        # Build plate surface
+        pm = max(extents[0], extents[1]) * 0.10
+        xs = np.array([[mins[0]-pm, maxs[0]+pm], [mins[0]-pm, maxs[0]+pm]])
+        ys = np.array([[mins[1]-pm, mins[1]-pm], [maxs[1]+pm, maxs[1]+pm]])
+        zs = np.full_like(xs, mins[2])
+        ax.plot_surface(xs, ys, zs, alpha=0.12, color="#06b6d4", linewidth=0)
+
+        # Build-direction arrow
+        ctr   = (mins + maxs) / 2
+        arrow = extents[build_axis] * 0.45 * build_vec
+        ax.quiver(*ctr, *arrow, color="#10b981", linewidth=1.6, arrow_length_ratio=0.22)
+
+        # ── Axes / limits ─────────────────────────────────────────────────────
+        pad = max(extents) * 0.04
+        ax.set_xlim(mins[0] - pad, maxs[0] + pad)
+        ax.set_ylim(mins[1] - pad, maxs[1] + pad)
+        ax.set_zlim(mins[2],       maxs[2] + extents[build_axis] * 0.55)
+
+        ax.tick_params(colors="#94a3b8", labelsize=6)
+        ax.set_xlabel("X (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
+        ax.set_ylabel("Y (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
+        bax = "XYZ"[build_axis]
+        ax.set_zlabel(f"{bax} / Build (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
+        for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
+            pane.fill = False
+            pane.set_edgecolor("#1e2a45")
+
+        n_overhang = int(is_overhang.sum())
+        pct_overhang = n_overhang / max(len(faces), 1) * 100
+        ax.set_title(
+            f"Bounding box: {extents[0]:.1f} × {extents[1]:.1f} × {extents[2]:.1f} mm"
+            f"   |   Build: +{bax}"
+            f"   |   Overhang faces: {n_overhang} ({pct_overhang:.1f}%)",
+            color="#94a3b8", fontsize=7.5, pad=6,
+        )
+
+        legend_handles = [
+            Patch(facecolor="#3b82f6", label="Nominal surface"),
+            Patch(facecolor="#ef4444", label=f"Overhang (>{overhang_angle:.0f}°)"),
+            Patch(facecolor="#06b6d4", alpha=0.5, label="Build plate"),
+            Patch(facecolor="#10b981", label=f"Build dir. (+{bax})"),
+        ]
+        ax.legend(handles=legend_handles, loc="upper left", fontsize=6.5,
+                  frameon=False, labelcolor="white", borderpad=0.2, handlelength=1.2)
+
+        ax.view_init(elev=22, azim=40)
+
+        plt.tight_layout(pad=0.4)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor(),
+                    bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        return buf.read()
+
+    except Exception:
+        return None
+
+
 # ─── Excel ────────────────────────────────────────────────────────────────────
 
 def export_to_excel(
@@ -929,6 +1097,56 @@ def export_to_pdf(
         kpi_tbl.setStyle(kpi_ts)
         story.append(kpi_tbl)
         story.append(Spacer(1, 14))
+
+        # ═════════════════════════════════════════════════════════════════════
+        # STL GEOMETRY SNAPSHOT (optional — only if file is still on disk)
+        # ═════════════════════════════════════════════════════════════════════
+        stl_path = inputs.get("part_file_path") or inputs.get("file_path")
+        build_dir = inputs.get("build_direction", "z") or "z"
+        if stl_path:
+            STL_FS = (9.0, 4.2)   # figsize (inches)
+            stl_png = _render_stl_snapshot(stl_path, build_direction=build_dir,
+                                           overhang_angle=45.0, figsize=STL_FS)
+            if stl_png:
+                story.append(_sec_hdr("Part Geometry — 3D View · Overhangs · Bounding Box"))
+                story.append(Spacer(1, 6))
+
+                stl_im = _chart_img(stl_png, COL_W - 8, *STL_FS)
+                stl_tbl = Table([[stl_im]], colWidths=[COL_W])
+                stl_tbl.setStyle(TableStyle([
+                    ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                    ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
+                    ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                    ('LEFTPADDING',  (0, 0), (-1, -1), 4),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                    ('TOPPADDING',   (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                    ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
+                ]))
+                story.append(stl_tbl)
+
+                # Small geometry stats row below the image
+                bb = inputs.get("bounding_box_mm", {})
+                geom_rows = [
+                    Paragraph(f"<b>Volume:</b> {_f(inputs.get('part_volume_cm3'), 3)} cm³", s_label),
+                    Paragraph(f"<b>Mass:</b> {_f(inputs.get('part_mass_kg'), 4)} kg", s_label),
+                    Paragraph(f"<b>Height:</b> {_f((inputs.get('part_height_cm') or 0)*10, 1)} mm", s_label),
+                    Paragraph(f"<b>Support est.:</b> {_f((inputs.get('support_pct_of_mass') or 0)*100, 1)}%", s_label),
+                ]
+                gr_tbl = Table([geom_rows], colWidths=[COL_W / 4] * 4)
+                gr_tbl.setStyle(TableStyle([
+                    ('BACKGROUND',   (0, 0), (-1, -1), colors.HexColor("#111827")),
+                    ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
+                    ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING',   (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+                    ('LEFTPADDING',  (0, 0), (-1, -1), 4),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                    ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
+                    ('LINEABOVE',    (0, 0), (-1, 0), 0.25, _BORDER),
+                ]))
+                story.append(gr_tbl)
+                story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
         # CHARTS  — aspect-ratio-correct placement
