@@ -239,9 +239,10 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     total_part_material = inputs.production_run * inputs.part_mass           # kg
     total_support_material = inputs.production_run * support_mass_per_part   # kg
 
-    # Total material in all builds (fill entire build volume)
+    # Total material in all builds — powder fills build_area × part_height,
+    # not the machine's full build_height (unused chamber above the part is empty).
     total_build_material = (
-        num_builds * inputs.build_area * inputs.build_height * inputs.material_density / 1000
+        num_builds * inputs.build_area * inputs.part_height * inputs.material_density / 1000
     )  # kg
 
     recycled_material = (
