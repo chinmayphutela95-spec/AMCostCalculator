@@ -357,31 +357,26 @@ def export_to_excel(
 
         wb = Workbook()
 
-        # ── Palette ────────────────────────────────────────────────────────────
-        NAVY        = "1B2A4A"
-        BLUE        = "1E3A8A"
-        BLUE_MID    = "2563EB"
-        CYAN        = "0891B2"
-        CYAN_LIGHT  = "E0F7FA"
+        # ── Palette (black & white modern) ────────────────────────────────────
+        INK_XL      = "111827"   # near-black banners & totals
+        HDR_XL      = "1F2937"   # table column headers
+        SEC_XL      = "374151"   # section sub-headers
         WHITE       = "FFFFFF"
-        GREY_LIGHT  = "F8FAFC"
-        ALT         = "EFF6FF"
-        DARK_ROW    = "1E2A45"
-        GOLD        = "F59E0B"
+        ALT         = "F9FAFB"   # alternating row tint
+        GREY_LIGHT  = "FFFFFF"   # even rows — plain white
 
         def _font(bold=False, color=None, size=10, italic=False):
-            return Font(name="Calibri", bold=bold, color=color or "374151", size=size, italic=italic)
+            return Font(name="Calibri", bold=bold, color=color or "111827", size=size, italic=italic)
 
-        _side = Side(style="thin", color="CBD5E1")
+        _side = Side(style="thin", color="E5E7EB")
         _border = Border(left=_side, right=_side, top=_side, bottom=_side)
-        _thick_bottom = Border(left=_side, right=_side, top=_side, bottom=Side(style="medium", color=BLUE_MID))
         _center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         _right  = Alignment(horizontal="right",  vertical="center")
         _left   = Alignment(horizontal="left",   vertical="center", indent=1)
 
         def fill(color): return PatternFill("solid", fgColor=color)
 
-        def hdr_cell(ws, row, col, text, bg=BLUE, fg=WHITE, sz=10, bold=True, align=_center):
+        def hdr_cell(ws, row, col, text, bg=HDR_XL, fg=WHITE, sz=10, bold=True, align=_center):
             c = ws.cell(row=row, column=col, value=text)
             c.font  = Font(name="Calibri", bold=bold, color=fg, size=sz)
             c.fill  = fill(bg)
@@ -389,7 +384,7 @@ def export_to_excel(
             c.alignment = align
             return c
 
-        def val_cell(ws, row, col, value, bold=False, color="374151", align=None, fmt=None, bg=None):
+        def val_cell(ws, row, col, value, bold=False, color="111827", align=None, fmt=None, bg=None):
             c = ws.cell(row=row, column=col, value=value)
             c.font   = _font(bold=bold, color=color)
             c.border = _border
@@ -398,7 +393,7 @@ def export_to_excel(
             if bg:  c.fill = fill(bg)
             return c
 
-        def section_header(ws, row, text, ncols, bg=CYAN, fg=WHITE):
+        def section_header(ws, row, text, ncols, bg=SEC_XL, fg=WHITE):
             ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
             c = ws.cell(row=row, column=1, value=f"  {text}")
             c.font      = Font(name="Calibri", bold=True, color=fg, size=10)
@@ -460,43 +455,44 @@ def export_to_excel(
         banner = ws1["A1"]
         banner.value    = "Metal AM Cost Analysis Report"
         banner.font     = Font(name="Calibri", bold=True, color=WHITE, size=18)
-        banner.fill     = fill(NAVY)
+        banner.fill     = fill(INK_XL)
         banner.alignment = Alignment(horizontal="left", vertical="center", indent=2)
         ws1.row_dimensions[1].height = 22
         ws1.row_dimensions[2].height = 22
         for col in range(2, 5):
-            ws1.cell(row=1, column=col).fill = fill(NAVY)
-            ws1.cell(row=2, column=col).fill = fill(NAVY)
+            ws1.cell(row=1, column=col).fill = fill(INK_XL)
+            ws1.cell(row=2, column=col).fill = fill(INK_XL)
 
         # Sub-info row
         ws1.merge_cells("A3:D3")
         sub = ws1["A3"]
         sub.value     = f"Project: {project_name}  ·  Machine: {machine_name}  ·  Material: {material_name}  ·  {datetime.now().strftime('%B %d, %Y')}"
-        sub.font      = Font(name="Calibri", color="B0C4D8", size=9, italic=True)
-        sub.fill      = fill(BLUE)
+        sub.font      = Font(name="Calibri", color="6B7280", size=9, italic=True)
+        sub.fill      = fill(ALT)
         sub.alignment = Alignment(horizontal="left", vertical="center", indent=2)
         ws1.row_dimensions[3].height = 16
         for col in range(2, 5):
-            ws1.cell(row=3, column=col).fill = fill(BLUE)
+            ws1.cell(row=3, column=col).fill = fill(ALT)
 
         # ── KPI Cards (row 5–8, cols A-D) ────────────────────────────────────
         kpis = [
-            ("Cost per Part",  _c(cpp),           BLUE_MID),
-            ("Total Run Cost", _c(total),          NAVY),
-            ("Parts per Build", str(results.get("parts_per_build", "–")), "0F5132"),
-            ("# of Builds",    str(results.get("num_builds", "–")),       "6B21A8"),
+            ("Cost per Part",   _c(cpp)),
+            ("Total Run Cost",  _c(total)),
+            ("Parts per Build", str(results.get("parts_per_build", "–"))),
+            ("# of Builds",     str(results.get("num_builds", "–"))),
         ]
         ws1.row_dimensions[5].height = 8   # spacer
-        for i, (label, value, bg) in enumerate(kpis, 1):
+        for i, (label, value) in enumerate(kpis, 1):
             c_label = ws1.cell(row=6, column=i, value=label)
-            c_label.font      = Font(name="Calibri", bold=True, color=WHITE, size=9)
-            c_label.fill      = fill(bg)
+            c_label.font      = Font(name="Calibri", bold=True, color="6B7280", size=9)
+            c_label.fill      = fill(WHITE)
             c_label.alignment = Alignment(horizontal="center", vertical="center")
-            c_label.border    = _border
+            c_label.border    = Border(top=Side(style="medium", color=INK_XL),
+                                       left=_side, right=_side, bottom=_side)
 
             c_val = ws1.cell(row=7, column=i, value=value)
-            c_val.font      = Font(name="Calibri", bold=True, color=WHITE, size=14)
-            c_val.fill      = fill(bg)
+            c_val.font      = Font(name="Calibri", bold=True, color=INK_XL, size=14)
+            c_val.fill      = fill(WHITE)
             c_val.alignment = Alignment(horizontal="center", vertical="center")
             c_val.border    = _border
 
@@ -505,9 +501,9 @@ def export_to_excel(
 
         # ── Cost Breakdown table (row 10+) ─────────────────────────────────
         r = 10
-        r = section_header(ws1, r, "COST BY CATEGORY", 4, bg=NAVY)
+        r = section_header(ws1, r, "COST BY CATEGORY", 4, bg=HDR_XL)
         for col, h in enumerate(["Category", "Total Cost", "Cost / Part", "% of Total"], 1):
-            hdr_cell(ws1, r, col, h, bg=BLUE_MID, sz=9)
+            hdr_cell(ws1, r, col, h, bg=HDR_XL, sz=9)
         r += 1
 
         for i, (cat, cost) in enumerate(active_cats):
@@ -525,7 +521,7 @@ def export_to_excel(
         ], 1):
             c = ws1.cell(row=r, column=col, value=v)
             c.font      = Font(name="Calibri", bold=True, color=WHITE, size=10)
-            c.fill      = fill(NAVY)
+            c.fill      = fill(INK_XL)
             c.border    = _border
             c.alignment = _right if col > 1 else _left
             if fmt: c.number_format = fmt
@@ -533,12 +529,12 @@ def export_to_excel(
 
         # ── Part & Machine summary (right column F-G) ─────────────────────
         rr = 6
-        rr = section_header(ws1, rr, "PART & PRODUCTION", 2, bg=NAVY)
-        ws1.cell(row=rr - 1, column=6).fill = fill(NAVY)
-        ws1.cell(row=rr - 1, column=7).fill = fill(NAVY)
+        rr = section_header(ws1, rr, "PART & PRODUCTION", 2, bg=HDR_XL)
+        ws1.cell(row=rr - 1, column=6).fill = fill(HDR_XL)
+        ws1.cell(row=rr - 1, column=7).fill = fill(HDR_XL)
         # re-do header in F:G columns
         for col in range(6, 8):
-            ws1.cell(row=rr - 1, column=col).fill   = fill(NAVY)
+            ws1.cell(row=rr - 1, column=col).fill   = fill(HDR_XL)
             ws1.cell(row=rr - 1, column=col).border = _border
 
         def kv_right(ws, row, label, value, i):
@@ -579,13 +575,13 @@ def export_to_excel(
         bc = ws_charts["B1"]
         bc.value     = "Visual Analysis"
         bc.font      = Font(name="Calibri", bold=True, color=WHITE, size=16)
-        bc.fill      = fill(NAVY)
+        bc.fill      = fill(INK_XL)
         bc.alignment = Alignment(horizontal="left", vertical="center", indent=2)
         ws_charts.row_dimensions[1].height = 20
         ws_charts.row_dimensions[2].height = 20
         for col in range(3, 15):
-            ws_charts.cell(row=1, column=col).fill = fill(NAVY)
-            ws_charts.cell(row=2, column=col).fill = fill(NAVY)
+            ws_charts.cell(row=1, column=col).fill = fill(INK_XL)
+            ws_charts.cell(row=2, column=col).fill = fill(INK_XL)
 
         # Embed matplotlib bar chart
         if active_cats:
@@ -636,11 +632,11 @@ def export_to_excel(
         t.value, t.font, t.fill, t.alignment = (
             "Detailed Cost Breakdown",
             Font(name="Calibri", bold=True, color=WHITE, size=14),
-            fill(NAVY),
+            fill(INK_XL),
             Alignment(horizontal="left", vertical="center", indent=2),
         )
         ws3.row_dimensions[1].height = 28
-        for col in range(2, 4): ws3.cell(row=1, column=col).fill = fill(NAVY)
+        for col in range(2, 4): ws3.cell(row=1, column=col).fill = fill(INK_XL)
         ws3["A2"].value = project_name
         ws3["A2"].font  = Font(name="Calibri", color="6B7280", size=9, italic=True)
         ws3.row_dimensions[2].height = 14
@@ -648,9 +644,9 @@ def export_to_excel(
         r3 = 4
 
         def bd_section(ws, r, title, rows):
-            r = section_header(ws, r, title, 3, bg=BLUE_MID)
+            r = section_header(ws, r, title, 3, bg=HDR_XL)
             for col, h in enumerate(["Line Item", "Value", "Unit"], 1):
-                hdr_cell(ws, r, col, h, bg=CYAN, sz=9)
+                hdr_cell(ws, r, col, h, bg=SEC_XL, sz=9)
             r += 1
             for i, (label, value, unit) in enumerate(rows):
                 bg = ALT if i % 2 == 0 else GREY_LIGHT
@@ -730,13 +726,13 @@ def export_to_excel(
         h4.value, h4.font, h4.fill, h4.alignment = (
             "Machine & Process Configuration",
             Font(name="Calibri", bold=True, color=WHITE, size=14),
-            fill(NAVY), Alignment(horizontal="left", vertical="center", indent=2),
+            fill(INK_XL), Alignment(horizontal="left", vertical="center", indent=2),
         )
         ws4.row_dimensions[1].height = 28
-        ws4["B1"].fill = fill(NAVY)
+        ws4["B1"].fill = fill(INK_XL)
 
         r4 = 3
-        r4 = section_header(ws4, r4, "MACHINE SPECIFICATIONS", 2, bg=BLUE_MID)
+        r4 = section_header(ws4, r4, "MACHINE SPECIFICATIONS", 2, bg=HDR_XL)
         r4 = kv_block(ws4, r4, [
             ("Machine Name",        inputs.get("machine_name", "–")),
             ("Manufacturer",        inputs.get("machine_manufacturer", "–")),
@@ -750,7 +746,7 @@ def export_to_excel(
             ("Machine Uptime",      _f((inputs.get("machine_uptime") or 0.8) * 100, 0, "%")),
             ("Powder Recycling",    _f((inputs.get("machine_recycling_fraction") or 0.9) * 100, 0, "%")),
         ])
-        r4 = section_header(ws4, r4, "PROCESS PARAMETERS", 2, bg=BLUE_MID)
+        r4 = section_header(ws4, r4, "PROCESS PARAMETERS", 2, bg=HDR_XL)
         r4 = kv_block(ws4, r4, [
             ("Build Direction",         (inputs.get("build_direction") or "–").upper()),
             ("Elevation above Plate",   _f(inputs.get("elevation_mm", 0), 0, " mm")),
@@ -761,7 +757,7 @@ def export_to_excel(
             ("Recoating Efficiency",    _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%")),
             ("Parts per Build Override", str(inputs.get("parts_per_build_override") or "Auto")),
         ])
-        r4 = section_header(ws4, r4, "POST-PROCESSING INPUTS", 2, bg=BLUE_MID)
+        r4 = section_header(ws4, r4, "POST-PROCESSING INPUTS", 2, bg=HDR_XL)
         r4 = kv_block(ws4, r4, [
             ("Heat Treatment",       "Enabled" if inputs.get("heat_treatment_enabled") else "Disabled"),
             ("  → Cost per Build",   _c(inputs.get("heat_treatment_cost_per_build", 0))),
@@ -788,13 +784,13 @@ def export_to_excel(
         h5.value, h5.font, h5.fill, h5.alignment = (
             "Material & Part Specification",
             Font(name="Calibri", bold=True, color=WHITE, size=14),
-            fill(NAVY), Alignment(horizontal="left", vertical="center", indent=2),
+            fill(INK_XL), Alignment(horizontal="left", vertical="center", indent=2),
         )
         ws5.row_dimensions[1].height = 28
-        ws5["B1"].fill = fill(NAVY)
+        ws5["B1"].fill = fill(INK_XL)
 
         r5 = 3
-        r5 = section_header(ws5, r5, "MATERIAL", 2, bg=BLUE_MID)
+        r5 = section_header(ws5, r5, "MATERIAL", 2, bg=HDR_XL)
         r5 = kv_block(ws5, r5, [
             ("Name",             inputs.get("material_name", "–")),
             ("Alloy Designation", inputs.get("material_alloy", "–")),
@@ -804,7 +800,7 @@ def export_to_excel(
             ("Layer Thickness",  _f(inputs.get("layer_thickness_um"), 0, " µm")),
             ("Build Rate",       _f(inputs.get("material_build_rate_cm3_hr"), 1, " cm³/hr")),
         ])
-        r5 = section_header(ws5, r5, "PART GEOMETRY", 2, bg=BLUE_MID)
+        r5 = section_header(ws5, r5, "PART GEOMETRY", 2, bg=HDR_XL)
         r5 = kv_block(ws5, r5, [
             ("Part File",          inputs.get("part_file_name", "–")),
             ("Volume",             _f(inputs.get("part_volume_cm3"), 3, " cm³")),
@@ -814,7 +810,7 @@ def export_to_excel(
             ("Support Fraction",   _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
             ("Elevation above Plate", _f(inputs.get("elevation_mm", 0), 0, " mm")),
         ])
-        r5 = section_header(ws5, r5, "PRODUCTION", 2, bg=BLUE_MID)
+        r5 = section_header(ws5, r5, "PRODUCTION", 2, bg=HDR_XL)
         r5 = kv_block(ws5, r5, [
             ("Production Run",    f"{prod_run:,} parts"),
             ("Parts per Build",   str(results.get("parts_per_build", "–"))),
@@ -836,10 +832,10 @@ def export_to_excel(
             h6.value, h6.font, h6.fill, h6.alignment = (
                 "Cost vs Quantity Data",
                 Font(name="Calibri", bold=True, color=WHITE, size=14),
-                fill(NAVY), Alignment(horizontal="left", vertical="center", indent=2),
+                fill(INK_XL), Alignment(horizontal="left", vertical="center", indent=2),
             )
             ws6.row_dimensions[1].height = 28
-            for col in range(2, 12): ws6.cell(row=1, column=col).fill = fill(NAVY)
+            for col in range(2, 12): ws6.cell(row=1, column=col).fill = fill(INK_XL)
 
             headers = [
                 "Qty", "Cost/Part ($)", "Total Cost ($)", "Material/Part",
@@ -848,7 +844,7 @@ def export_to_excel(
             ]
             r6 = 3
             for c, h in enumerate(headers, 1):
-                hdr_cell(ws6, r6, c, h, bg=BLUE_MID, sz=9)
+                hdr_cell(ws6, r6, c, h, bg=HDR_XL, sz=9)
 
             for i, pt in enumerate(quantity_curve):
                 r6 += 1
@@ -901,17 +897,14 @@ def export_to_pdf(
         MARGIN  = 1.8 * cm
         COL_W   = PAGE_W - 2 * MARGIN
 
-        # ── Palette ───────────────────────────────────────────────────────────
-        NAVY     = colors.HexColor("#1B2A4A")
-        BLUE_MID = colors.HexColor("#2563EB")
-        ALT      = colors.HexColor("#EFF6FF")
+        # ── Palette (black & white modern) ────────────────────────────────────
+        INK      = colors.HexColor("#111827")   # near-black — headings, banners
+        HDR_BG   = colors.HexColor("#1F2937")   # table/section headers
+        ALT      = colors.HexColor("#F9FAFB")   # alternating row tint
         WHITE    = colors.white
-        DARK     = colors.HexColor("#111827")
-        MUTED    = colors.HexColor("#64748B")
-        GOLD     = colors.HexColor("#F59E0B")
-        SUCCESS  = colors.HexColor("#059669")
-        PURPLE   = colors.HexColor("#7C3AED")
-        DIVIDER  = colors.HexColor("#CBD5E1")
+        DARK     = colors.HexColor("#111827")   # body text
+        MUTED    = colors.HexColor("#6B7280")   # labels / captions
+        DIVIDER  = colors.HexColor("#E5E7EB")   # borders
 
         # ── Style factory ─────────────────────────────────────────────────────
         def _s(name, **kw):
@@ -921,14 +914,14 @@ def export_to_pdf(
 
         s_title   = _s("Ti", fontSize=20, textColor=WHITE, fontName="Helvetica-Bold",
                         leading=24)
-        s_sub     = _s("Su", fontSize=8.5, textColor=colors.HexColor("#B0C4D8"),
+        s_sub     = _s("Su", fontSize=8.5, textColor=colors.HexColor("#9CA3AF"),
                         leading=12)
         s_label   = _s("Lb", fontSize=8, textColor=MUTED, leading=11)
         s_val     = _s("Vl", fontSize=8.5, textColor=DARK, fontName="Helvetica-Bold",
                         leading=11)
-        s_kpi_lbl = _s("KL", fontSize=7.5, textColor=WHITE, fontName="Helvetica-Bold",
+        s_kpi_lbl = _s("KL", fontSize=7.5, textColor=MUTED, fontName="Helvetica-Bold",
                         alignment=TA_CENTER, leading=10)
-        s_kpi_val = _s("KV", fontSize=15, textColor=WHITE, fontName="Helvetica-Bold",
+        s_kpi_val = _s("KV", fontSize=15, textColor=DARK, fontName="Helvetica-Bold",
                         alignment=TA_CENTER, leading=19)
         s_tbl_hdr = _s("TH", fontSize=8, textColor=WHITE, fontName="Helvetica-Bold",
                         alignment=TA_CENTER, leading=10)
@@ -940,7 +933,7 @@ def export_to_pdf(
 
         def _base_ts(nrows=0, hdr_rows=1):
             ts = TableStyle([
-                ('BACKGROUND',   (0, 0), (-1, hdr_rows - 1), BLUE_MID),
+                ('BACKGROUND',   (0, 0), (-1, hdr_rows - 1), HDR_BG),
                 ('TEXTCOLOR',    (0, 0), (-1, hdr_rows - 1), WHITE),
                 ('FONTNAME',     (0, 0), (-1, hdr_rows - 1), 'Helvetica-Bold'),
                 ('FONTSIZE',     (0, 0), (-1, -1), 8),
@@ -979,13 +972,13 @@ def export_to_pdf(
             return tbl
 
         def _sec_hdr(text):
-            """Blue section header with gold left accent bar."""
-            data = [["", Paragraph(text.upper(), _s("SH", fontSize=8, textColor=WHITE,
+            """Section header — thin black left bar, light gray background, dark text."""
+            data = [["", Paragraph(text.upper(), _s("SH", fontSize=8, textColor=INK,
                                                      fontName="Helvetica-Bold", leading=10))]]
             tbl = Table(data, colWidths=[4, COL_W - 4])
             tbl.setStyle(TableStyle([
-                ('BACKGROUND',   (0, 0), (0, 0), GOLD),
-                ('BACKGROUND',   (1, 0), (1, 0), BLUE_MID),
+                ('BACKGROUND',   (0, 0), (0, 0), INK),
+                ('BACKGROUND',   (1, 0), (1, 0), colors.HexColor("#F3F4F6")),
                 ('LEFTPADDING',  (0, 0), (-1, -1), 5),
                 ('RIGHTPADDING', (0, 0), (-1, -1), 5),
                 ('TOPPADDING',   (0, 0), (-1, -1), 5),
@@ -1064,13 +1057,13 @@ def export_to_pdf(
         ]]
         cover = Table(cover_data, colWidths=[COL_W * 0.55, COL_W * 0.45])
         cover.setStyle(TableStyle([
-            ('BACKGROUND',   (0, 0), (-1, -1), NAVY),
+            ('BACKGROUND',   (0, 0), (-1, -1), INK),
             ('LEFTPADDING',  (0, 0), (-1, -1), 14),
             ('RIGHTPADDING', (0, 0), (-1, -1), 14),
             ('TOPPADDING',   (0, 0), (-1, -1), 18),
             ('BOTTOMPADDING',(0, 0), (-1, -1), 18),
             ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-            ('LINEBELOW',    (0, 0), (-1, 0), 3, GOLD),
+            ('LINEBELOW',    (0, 0), (-1, 0), 2, DIVIDER),
         ]))
         story.append(cover)
         story.append(Spacer(1, 10))
@@ -1079,27 +1072,28 @@ def export_to_pdf(
         # KPI CARDS
         # ═════════════════════════════════════════════════════════════════════
         kpis = [
-            ("Cost per Part",   _c(cpp),   BLUE_MID),
-            ("Total Run Cost",  _c(total),  NAVY),
-            ("Parts per Build", str(results.get("parts_per_build", "–")), SUCCESS),
-            ("# of Builds",     str(results.get("num_builds", "–")),      PURPLE),
+            ("Cost per Part",   _c(cpp)),
+            ("Total Run Cost",  _c(total)),
+            ("Parts per Build", str(results.get("parts_per_build", "–"))),
+            ("# of Builds",     str(results.get("num_builds", "–"))),
         ]
         kpi_data = [
-            [Paragraph(lbl, s_kpi_lbl) for lbl, _, _ in kpis],
-            [Paragraph(val, s_kpi_val) for _, val, _ in kpis],
+            [Paragraph(lbl, s_kpi_lbl) for lbl, _ in kpis],
+            [Paragraph(val, s_kpi_val) for _, val in kpis],
         ]
-        kpi_tbl = Table(kpi_data, colWidths=[COL_W / 4] * 4, rowHeights=[18, 32])
+        kpi_tbl = Table(kpi_data, colWidths=[COL_W / 4] * 4, rowHeights=[16, 34])
         kpi_ts = TableStyle([
+            ('BACKGROUND',   (0, 0), (-1, -1), WHITE),
             ('LEFTPADDING',  (0, 0), (-1, -1), 6),
             ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING',   (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+            ('TOPPADDING',   (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 6),
             ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
-            ('LINEBELOW',    (0, 1), (-1, 1), 0.5, _BORDER),
+            ('GRID',         (0, 0), (-1, -1), 0.25, DIVIDER),
+            ('LINEABOVE',    (0, 0), (-1, 0), 2, INK),
+            ('LINEBEFORE',   (1, 0), (3, 1), 0.25, DIVIDER),
         ])
-        for i, (_, _, c) in enumerate(kpis):
-            kpi_ts.add('BACKGROUND', (i, 0), (i, 1), c)
         kpi_tbl.setStyle(kpi_ts)
         story.append(kpi_tbl)
         story.append(Spacer(1, 14))
@@ -1245,7 +1239,7 @@ def export_to_pdf(
         bk_tbl = Table(bk_data, colWidths=[COL_W*0.36, COL_W*0.22, COL_W*0.22, COL_W*0.20])
         bk_ts = _base_ts(nrows=len(bk_data))
         last = len(bk_data) - 1
-        bk_ts.add('BACKGROUND', (0, last), (-1, last), NAVY)
+        bk_ts.add('BACKGROUND', (0, last), (-1, last), INK)
         bk_ts.add('TEXTCOLOR',  (0, last), (-1, last), WHITE)
         bk_ts.add('FONTNAME',   (0, last), (-1, last), 'Helvetica-Bold')
         bk_tbl.setStyle(bk_ts)
@@ -1278,7 +1272,7 @@ def export_to_pdf(
         t_tbl = Table(t_data, colWidths=[COL_W*0.22, COL_W*0.16, COL_W*0.62])
         t_ts = _base_ts(nrows=len(t_data))
         tl = len(t_data) - 1
-        t_ts.add('BACKGROUND', (0, tl), (-1, tl), NAVY)
+        t_ts.add('BACKGROUND', (0, tl), (-1, tl), INK)
         t_ts.add('TEXTCOLOR',  (0, tl), (-1, tl), WHITE)
         t_ts.add('FONTNAME',   (0, tl), (-1, tl), 'Helvetica-Bold')
         t_tbl.setStyle(t_ts)
