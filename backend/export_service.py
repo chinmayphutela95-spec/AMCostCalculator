@@ -915,8 +915,9 @@ def export_to_pdf(
 
         # ── Style factory ─────────────────────────────────────────────────────
         def _s(name, **kw):
-            return ParagraphStyle(name, fontName="Helvetica", fontSize=9,
-                                  leading=12, textColor=DARK, **kw)
+            base = dict(fontName="Helvetica", fontSize=9, leading=12, textColor=DARK)
+            base.update(kw)
+            return ParagraphStyle(name, **base)
 
         s_title   = _s("Ti", fontSize=20, textColor=WHITE, fontName="Helvetica-Bold",
                         leading=24)
