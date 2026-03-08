@@ -50,10 +50,11 @@
   }
   .btn-secondary {
     @apply inline-flex items-center gap-2
-           bg-bg-subtle border border-bg-border
+           border border-bg-border
            hover:border-accent-blue/50 hover:bg-bg-hover
            text-text-primary font-medium px-4 py-2.5 rounded-xl
            transition-all duration-200;
+    background-color: #1a2235;
   }
   .btn-danger {
     @apply inline-flex items-center gap-2
