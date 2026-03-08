@@ -723,255 +723,352 @@ def export_to_pdf(
         from reportlab.lib.units import cm
         from reportlab.platypus import (
             SimpleDocTemplate, Table, TableStyle, Paragraph,
-            Spacer, HRFlowable, KeepTogether, Image as RLImage,
+            Spacer, KeepTogether, Image as RLImage,
         )
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-        W, H = A4
-        margin = 1.6 * cm
-        col_w = W - 2 * margin
+        PAGE_W, PAGE_H = A4
+        MARGIN  = 1.8 * cm
+        COL_W   = PAGE_W - 2 * MARGIN
 
-        doc = SimpleDocTemplate(
-            output_path, pagesize=A4,
-            leftMargin=margin, rightMargin=margin,
-            topMargin=margin, bottomMargin=margin,
-        )
-        styles = getSampleStyleSheet()
+        # ── Palette ───────────────────────────────────────────────────────────
+        NAVY     = colors.HexColor("#1B2A4A")
+        BLUE_MID = colors.HexColor("#2563EB")
+        ALT      = colors.HexColor("#EFF6FF")
+        WHITE    = colors.white
+        DARK     = colors.HexColor("#111827")
+        MUTED    = colors.HexColor("#64748B")
+        GOLD     = colors.HexColor("#F59E0B")
+        SUCCESS  = colors.HexColor("#059669")
+        PURPLE   = colors.HexColor("#7C3AED")
+        DIVIDER  = colors.HexColor("#CBD5E1")
+        CHART_BG = colors.HexColor("#0f1623")
 
-        # ── Colours ───────────────────────────────────────────────────────────
-        NAVY      = colors.HexColor("#1B2A4A")
-        BLUE      = colors.HexColor("#1E3A8A")
-        BLUE_MID  = colors.HexColor("#2563EB")
-        CYAN      = colors.HexColor("#0891B2")
-        CYAN_LIGHT = colors.HexColor("#E0F7FA")
-        ALT       = colors.HexColor("#EFF6FF")
-        GREY      = colors.HexColor("#F8FAFC")
-        WHITE     = colors.white
-        DARK      = colors.HexColor("#1E293B")
-        MUTED     = colors.HexColor("#64748B")
-        GOLD      = colors.HexColor("#F59E0B")
-        SUCCESS   = colors.HexColor("#059669")
-        PURPLE    = colors.HexColor("#7C3AED")
+        # ── Style factory ─────────────────────────────────────────────────────
+        def _s(name, **kw):
+            return ParagraphStyle(name, fontName="Helvetica", fontSize=9,
+                                  leading=12, textColor=DARK, **kw)
 
-        def _style(name, **kw):
-            return ParagraphStyle(name, parent=styles["Normal"], **kw)
+        s_title   = _s("Ti", fontSize=20, textColor=WHITE, fontName="Helvetica-Bold",
+                        leading=24)
+        s_sub     = _s("Su", fontSize=8.5, textColor=colors.HexColor("#B0C4D8"),
+                        leading=12)
+        s_label   = _s("Lb", fontSize=8, textColor=MUTED, leading=11)
+        s_val     = _s("Vl", fontSize=8.5, textColor=DARK, fontName="Helvetica-Bold",
+                        leading=11)
+        s_kpi_lbl = _s("KL", fontSize=7.5, textColor=WHITE, fontName="Helvetica-Bold",
+                        alignment=TA_CENTER, leading=10)
+        s_kpi_val = _s("KV", fontSize=15, textColor=WHITE, fontName="Helvetica-Bold",
+                        alignment=TA_CENTER, leading=19)
+        s_tbl_hdr = _s("TH", fontSize=8, textColor=WHITE, fontName="Helvetica-Bold",
+                        alignment=TA_CENTER, leading=10)
+        s_ack     = _s("Ak", fontSize=6.5, textColor=MUTED, alignment=TA_CENTER,
+                        leading=9)
 
-        s_title    = _style("T1", fontSize=22, textColor=WHITE,    fontName="Helvetica-Bold", spaceAfter=2)
-        s_subtitle = _style("T2", fontSize=9,  textColor=colors.HexColor("#B0C4D8"), fontName="Helvetica", spaceAfter=0)
-        s_h2       = _style("H2", fontSize=11, textColor=NAVY,     fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=4)
-        s_body     = _style("Bd", fontSize=8.5, textColor=DARK,    leading=12)
-        s_kpi_lbl  = _style("KL", fontSize=8,  textColor=WHITE,    fontName="Helvetica-Bold", alignment=TA_CENTER)
-        s_kpi_val  = _style("KV", fontSize=16, textColor=WHITE,    fontName="Helvetica-Bold", alignment=TA_CENTER)
+        # ── Table helpers ─────────────────────────────────────────────────────
+        _BORDER = DIVIDER
 
-        def _tbl_style(header_rows=1, nrows=0):
+        def _base_ts(nrows=0, hdr_rows=1):
             ts = TableStyle([
-                ('BACKGROUND',    (0, 0), (-1, header_rows - 1), BLUE_MID),
-                ('TEXTCOLOR',     (0, 0), (-1, header_rows - 1), WHITE),
-                ('FONTNAME',      (0, 0), (-1, header_rows - 1), 'Helvetica-Bold'),
-                ('FONTSIZE',      (0, 0), (-1, -1), 8),
-                ('GRID',          (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")),
-                ('LEFTPADDING',   (0, 0), (-1, -1), 6),
-                ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
-                ('TOPPADDING',    (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-                ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
-                ('ALIGN',         (1, 0), (-1, -1), 'RIGHT'),
-                ('ALIGN',         (0, 0), (0, -1),  'LEFT'),
+                ('BACKGROUND',   (0, 0), (-1, hdr_rows - 1), BLUE_MID),
+                ('TEXTCOLOR',    (0, 0), (-1, hdr_rows - 1), WHITE),
+                ('FONTNAME',     (0, 0), (-1, hdr_rows - 1), 'Helvetica-Bold'),
+                ('FONTSIZE',     (0, 0), (-1, -1), 8),
+                ('GRID',         (0, 0), (-1, -1), 0.25, _BORDER),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 7),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                ('TOPPADDING',   (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                ('ALIGN',        (1, 0), (-1, -1), 'RIGHT'),
+                ('ALIGN',        (0, 0), (0, -1),  'LEFT'),
             ])
-            if nrows > header_rows:
-                for i in range(header_rows, nrows, 2):
-                    ts.add('BACKGROUND', (0, i), (-1, i), ALT)
+            for i in range(hdr_rows, nrows, 2):
+                ts.add('BACKGROUND', (0, i), (-1, i), ALT)
             return ts
 
-        def _section_tbl(rows, cw=None):
-            cw = cw or [col_w * 0.52, col_w * 0.48]
-            n = len(rows)
-            data = [[Paragraph(f"<b>{lbl}</b>", s_body), Paragraph(str(val), s_body)]
+        def _kv_tbl(rows, cw=None):
+            """Two-column key/value table with muted labels and bold values."""
+            cw = cw or [COL_W * 0.44, COL_W * 0.56]
+            data = [[Paragraph(lbl, s_label), Paragraph(str(val), s_val)]
                     for lbl, val in rows]
             tbl = Table(data, colWidths=cw)
-            tbl.setStyle(TableStyle([
-                ('FONTSIZE',      (0, 0), (-1, -1), 8),
-                ('GRID',          (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")),
-                ('LEFTPADDING',   (0, 0), (-1, -1), 6),
-                ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
-                ('TOPPADDING',    (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ts = TableStyle([
+                ('GRID',          (0, 0), (-1, -1), 0.25, _BORDER),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+                ('TOPPADDING',    (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
                 ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
-                ('ALIGN',         (1, 0), (-1, -1), 'RIGHT'),
+                ('ALIGN',         (1, 0), (1, -1),  'RIGHT'),
                 ('ALIGN',         (0, 0), (0, -1),  'LEFT'),
-                *[('BACKGROUND', (0, i), (-1, i), ALT) for i in range(0, n, 2)],
+            ])
+            for i in range(0, len(rows), 2):
+                ts.add('BACKGROUND', (0, i), (-1, i), ALT)
+            tbl.setStyle(ts)
+            return tbl
+
+        def _sec_hdr(text):
+            """Blue section header with gold left accent bar."""
+            data = [["", Paragraph(text.upper(), _s("SH", fontSize=8, textColor=WHITE,
+                                                     fontName="Helvetica-Bold", leading=10))]]
+            tbl = Table(data, colWidths=[4, COL_W - 4])
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND',   (0, 0), (0, 0), GOLD),
+                ('BACKGROUND',   (1, 0), (1, 0), BLUE_MID),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING',   (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+                ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
             ]))
             return tbl
 
-        def chart_img(png_bytes, width, height):
-            return RLImage(io.BytesIO(png_bytes), width=width, height=height)
+        def _chart_img(png_bytes, target_w, fw, fh):
+            """Place chart PNG maintaining its original aspect ratio."""
+            target_h = target_w * (fh / fw)
+            return RLImage(io.BytesIO(png_bytes), width=target_w, height=target_h)
 
+        # ── Per-page footer (page number + acknowledgment) ────────────────────
+        def _footer(canvas, doc):
+            canvas.saveState()
+            fy = 0.85 * cm
+            canvas.setStrokeColor(DIVIDER)
+            canvas.setLineWidth(0.3)
+            canvas.line(MARGIN, fy + 9, PAGE_W - MARGIN, fy + 9)
+            canvas.setFont("Helvetica", 6.5)
+            canvas.setFillColor(MUTED)
+            canvas.drawString(
+                MARGIN, fy,
+                "Tool developed by Chinmay Phutela  ·  Cost model methodology inspired by MIT  ·  Metal AM Cost Analyzer"
+            )
+            canvas.drawRightString(PAGE_W - MARGIN, fy, f"Page {doc.page}")
+            canvas.restoreState()
+
+        doc = SimpleDocTemplate(
+            output_path, pagesize=A4,
+            leftMargin=MARGIN, rightMargin=MARGIN,
+            topMargin=MARGIN, bottomMargin=1.9 * cm,
+        )
+
+        # ── Common data ───────────────────────────────────────────────────────
         story = []
-        total     = results.get("total_cost", 0) or 1
-        cpp       = results.get("cost_per_part", 0) or 0
-        prod_run  = inputs.get("production_run", 1) or 1
+        total         = results.get("total_cost", 0) or 1
+        cpp           = results.get("cost_per_part", 0) or 0
+        prod_run      = inputs.get("production_run", 1) or 1
         machine_name  = inputs.get("machine_name",  inputs.get("machine",  "–"))
         material_name = inputs.get("material_name", inputs.get("material", "–"))
 
         categories = [
-            ("Material",               results.get("material",         {}).get("cost", 0)),
-            ("Build Prep",             results.get("build_prep",       {}).get("cost", 0)),
-            ("Machine Usage",          results.get("machine",          {}).get("cost", 0)),
-            ("Consumables",            results.get("consumables",      {}).get("cost", 0)),
-            ("Labor",                  results.get("labor",            {}).get("cost", 0)),
-            ("Post-Process",           results.get("post_process",     {}).get("cost", 0)),
-            ("Heat Treatment",         results.get("metal_am_extensions", {}).get("heat_treatment_cost", 0)),
-            ("Part Separation",        results.get("metal_am_extensions", {}).get("part_separation_cost", 0)),
-            ("HIP",                    results.get("metal_am_extensions", {}).get("hip_cost", 0)),
-            ("Surface Treatment",      results.get("metal_am_extensions", {}).get("surface_treatment_cost", 0)),
-            ("NDT / Inspection",       results.get("metal_am_extensions", {}).get("ndt_cost", 0)),
+            ("Material",         results.get("material",    {}).get("cost", 0)),
+            ("Build Prep",       results.get("build_prep",  {}).get("cost", 0)),
+            ("Machine Usage",    results.get("machine",     {}).get("cost", 0)),
+            ("Consumables",      results.get("consumables", {}).get("cost", 0)),
+            ("Labor",            results.get("labor",       {}).get("cost", 0)),
+            ("Post-Process",     results.get("post_process",{}).get("cost", 0)),
+            ("Heat Treatment",   results.get("metal_am_extensions", {}).get("heat_treatment_cost", 0)),
+            ("Part Separation",  results.get("metal_am_extensions", {}).get("part_separation_cost", 0)),
+            ("HIP",              results.get("metal_am_extensions", {}).get("hip_cost", 0)),
+            ("Surface Treatment",results.get("metal_am_extensions", {}).get("surface_treatment_cost", 0)),
+            ("NDT / Inspection", results.get("metal_am_extensions", {}).get("ndt_cost", 0)),
         ]
         active_cats = [(n, v) for n, v in categories if v and v > 0]
 
-        # ── Cover banner ──────────────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════════════
+        # COVER BANNER
+        # ═════════════════════════════════════════════════════════════════════
         cover_data = [[
             Paragraph("Metal AM Cost Analysis Report", s_title),
             Paragraph(
                 f"<b>Project:</b> {project_name}<br/>"
                 f"<b>Machine:</b> {machine_name}<br/>"
                 f"<b>Material:</b> {material_name}<br/>"
-                f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y  %H:%M')}",
-                s_subtitle
-            )
+                f"<b>Date:</b> {datetime.now().strftime('%B %d, %Y')}",
+                s_sub
+            ),
         ]]
-        cover_tbl = Table(cover_data, colWidths=[col_w * 0.58, col_w * 0.42])
-        cover_tbl.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), NAVY),
-            ('LEFTPADDING',   (0, 0), (-1, -1), 12),
-            ('RIGHTPADDING',  (0, 0), (-1, -1), 12),
-            ('TOPPADDING',    (0, 0), (-1, -1), 16),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 16),
-            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        cover = Table(cover_data, colWidths=[COL_W * 0.55, COL_W * 0.45])
+        cover.setStyle(TableStyle([
+            ('BACKGROUND',   (0, 0), (-1, -1), NAVY),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 14),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 14),
+            ('TOPPADDING',   (0, 0), (-1, -1), 18),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 18),
+            ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+            ('LINEBELOW',    (0, 0), (-1, 0), 3, GOLD),
         ]))
-        story.append(cover_tbl)
-        story.append(Spacer(1, 8))
+        story.append(cover)
+        story.append(Spacer(1, 10))
 
-        # ── KPI cards ─────────────────────────────────────────────────────────
-        kpi_colors = [BLUE_MID, NAVY, SUCCESS, PURPLE]
+        # ═════════════════════════════════════════════════════════════════════
+        # KPI CARDS
+        # ═════════════════════════════════════════════════════════════════════
         kpis = [
-            ("Cost per Part",   _c(cpp)),
-            ("Total Run Cost",  _c(total)),
-            ("Parts per Build", str(results.get("parts_per_build", "–"))),
-            ("# of Builds",     str(results.get("num_builds", "–"))),
+            ("Cost per Part",   _c(cpp),   BLUE_MID),
+            ("Total Run Cost",  _c(total),  NAVY),
+            ("Parts per Build", str(results.get("parts_per_build", "–")), SUCCESS),
+            ("# of Builds",     str(results.get("num_builds", "–")),      PURPLE),
         ]
-        kpi_rows = [
-            [Paragraph(lbl, s_kpi_lbl) for lbl, _ in kpis],
-            [Paragraph(val, s_kpi_val) for _, val in kpis],
+        kpi_data = [
+            [Paragraph(lbl, s_kpi_lbl) for lbl, _, _ in kpis],
+            [Paragraph(val, s_kpi_val) for _, val, _ in kpis],
         ]
-        kpi_tbl = Table(kpi_rows, colWidths=[col_w / 4] * 4)
-        kpi_style = TableStyle([
-            ('LEFTPADDING',   (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
-            ('TOPPADDING',    (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
-            ('LINEBELOW',     (0, 1), (-1, 1), 3, GOLD),
+        kpi_tbl = Table(kpi_data, colWidths=[COL_W / 4] * 4, rowHeights=[18, 32])
+        kpi_ts = TableStyle([
+            ('LEFTPADDING',  (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING',   (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 5),
+            ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
+            ('LINEBELOW',    (0, 1), (-1, 1), 0.5, _BORDER),
         ])
-        for i, c in enumerate(kpi_colors):
-            kpi_style.add('BACKGROUND', (i, 0), (i, 1), c)
-            kpi_style.add('TEXTCOLOR',  (i, 0), (i, 1), WHITE)
-        kpi_tbl.setStyle(kpi_style)
+        for i, (_, _, c) in enumerate(kpis):
+            kpi_ts.add('BACKGROUND', (i, 0), (i, 1), c)
+        kpi_tbl.setStyle(kpi_ts)
         story.append(kpi_tbl)
-        story.append(Spacer(1, 12))
+        story.append(Spacer(1, 14))
 
-        # ── Charts side-by-side ───────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════════════
+        # CHARTS  — aspect-ratio-correct placement
+        # ═════════════════════════════════════════════════════════════════════
+        # figsize chosen so both charts share the same pixel height at their
+        # respective target widths → no vertical stretching.
+        BAR_FS = (7.2, 3.4)   # width, height in inches
+        PIE_FS = (4.8, 3.4)
+        LC_FS  = (10.0, 3.4)
+
+        # Both charts rendered at H=136 pts; derive widths from aspect ratio
+        H_CHART = 136
+        W_BAR   = H_CHART * (BAR_FS[0] / BAR_FS[1])   # ≈ 288 pts
+        W_PIE   = H_CHART * (PIE_FS[0] / PIE_FS[1])   # ≈ 192 pts
+        # column widths fill COL_W exactly
+        W_BAR_COL = COL_W - W_PIE - 6
+        W_PIE_COL = W_PIE + 6
+
         if active_cats:
+            story.append(_sec_hdr("Cost Analysis Charts"))
+            story.append(Spacer(1, 6))
+
             bar_png = _make_bar_chart(
-                [n for n, _ in active_cats],
-                [v for _, v in active_cats],
-                title="Cost by Category ($)",
-                figsize=(6.5, 2.8)
+                [n for n, _ in active_cats], [v for _, v in active_cats],
+                title="Cost by Category ($)", figsize=BAR_FS,
             )
             pie_png = _make_pie_chart(
-                [n for n, _ in active_cats],
-                [v for _, v in active_cats],
-                title="Cost Distribution",
-                figsize=(5, 2.8)
+                [n for n, _ in active_cats], [v for _, v in active_cats],
+                title="Cost Distribution", figsize=PIE_FS,
             )
-
-            W_bar = col_w * 0.56
-            W_pie = col_w * 0.42
-            H_chart = 170
+            bar_im = _chart_img(bar_png, W_BAR_COL - 6, *BAR_FS)
 
             if pie_png:
-                charts_data = [[chart_img(bar_png, W_bar, H_chart), chart_img(pie_png, W_pie, H_chart)]]
-                charts_tbl = Table(charts_data, colWidths=[W_bar + 4, W_pie])
-                charts_tbl.setStyle(TableStyle([
-                    ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-                    ('LEFTPADDING',   (0, 0), (-1, -1), 2),
-                    ('RIGHTPADDING',  (0, 0), (-1, -1), 2),
-                    ('BACKGROUND',    (0, 0), (-1, -1), colors.HexColor("#0f1623")),
-                    ('ROUNDEDCORNERS', [4]),
-                ]))
+                pie_im = _chart_img(pie_png, W_PIE, *PIE_FS)
+                ct = Table([[bar_im, pie_im]], colWidths=[W_BAR_COL, W_PIE_COL])
             else:
-                charts_tbl = Table([[chart_img(bar_png, col_w, H_chart)]])
-                charts_tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#0f1623"))]))
+                bar_im = _chart_img(bar_png, COL_W - 8, *BAR_FS)
+                ct = Table([[bar_im]], colWidths=[COL_W])
 
-            story.append(Paragraph("Cost Analysis Charts", s_h2))
-            story.append(charts_tbl)
-            story.append(Spacer(1, 10))
+            ct.setStyle(TableStyle([
+                ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 3),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                ('TOPPADDING',   (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
+            ]))
+            story.append(ct)
+            story.append(Spacer(1, 12))
 
-        # ── Quantity curve chart ───────────────────────────────────────────────
         if quantity_curve:
-            qc_png = _make_line_chart(quantity_curve, current_qty=prod_run, figsize=(9.5, 3))
-            if qc_png:
-                story.append(Paragraph("Cost per Part vs Production Quantity", s_h2))
-                qc_img = chart_img(qc_png, col_w, 180)
-                qc_tbl = Table([[qc_img]], colWidths=[col_w])
-                qc_tbl.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#0f1623"))]))
-                story.append(qc_tbl)
-                story.append(Spacer(1, 10))
+            lc_png = _make_line_chart(quantity_curve, current_qty=prod_run, figsize=LC_FS)
+            if lc_png:
+                story.append(_sec_hdr("Cost per Part vs Production Quantity"))
+                story.append(Spacer(1, 6))
+                lc_im = _chart_img(lc_png, COL_W - 8, *LC_FS)
+                lct = Table([[lc_im]], colWidths=[COL_W])
+                lct.setStyle(TableStyle([
+                    ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                    ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
+                    ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                    ('LEFTPADDING',  (0, 0), (-1, -1), 4),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                    ('TOPPADDING',   (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                    ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
+                ]))
+                story.append(lct)
+                story.append(Spacer(1, 12))
 
-        # ── Cost breakdown table ───────────────────────────────────────────────
-        story.append(Paragraph("Cost Breakdown by Category", s_h2))
-        bk_data = [["Category", "Total Cost", "Cost / Part", "% of Total"]]
+        # ═════════════════════════════════════════════════════════════════════
+        # COST BREAKDOWN TABLE
+        # ═════════════════════════════════════════════════════════════════════
+        story.append(_sec_hdr("Cost Breakdown by Category"))
+        story.append(Spacer(1, 6))
+
+        bk_hdrs = [
+            Paragraph(h, _s("BH", fontSize=8, textColor=WHITE,
+                             fontName="Helvetica-Bold",
+                             alignment=TA_LEFT if i == 0 else TA_RIGHT))
+            for i, h in enumerate(["Category", "Total Cost", "Cost / Part", "% of Total"])
+        ]
+        bk_data = [bk_hdrs]
         for cat, cost in active_cats:
             bk_data.append([cat, _c(cost), _c(cost / prod_run), _pct(cost, total)])
         bk_data.append(["TOTAL", _c(total), _c(cpp), "100%"])
 
-        bk_tbl = Table(bk_data, colWidths=[col_w * 0.38, col_w * 0.22, col_w * 0.22, col_w * 0.18])
-        bk_style = _tbl_style(nrows=len(bk_data))
+        bk_tbl = Table(bk_data, colWidths=[COL_W*0.36, COL_W*0.22, COL_W*0.22, COL_W*0.20])
+        bk_ts = _base_ts(nrows=len(bk_data))
         last = len(bk_data) - 1
-        bk_style.add('BACKGROUND', (0, last), (-1, last), NAVY)
-        bk_style.add('TEXTCOLOR',  (0, last), (-1, last), WHITE)
-        bk_style.add('FONTNAME',   (0, last), (-1, last), 'Helvetica-Bold')
-        bk_tbl.setStyle(bk_style)
+        bk_ts.add('BACKGROUND', (0, last), (-1, last), NAVY)
+        bk_ts.add('TEXTCOLOR',  (0, last), (-1, last), WHITE)
+        bk_ts.add('FONTNAME',   (0, last), (-1, last), 'Helvetica-Bold')
+        bk_tbl.setStyle(bk_ts)
         story.append(KeepTogether([bk_tbl]))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 12))
 
-        # ── Machine time breakdown ─────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════════════
+        # MACHINE TIME BREAKDOWN
+        # ═════════════════════════════════════════════════════════════════════
         mach_r = results.get("machine", {})
-        story.append(Paragraph("Machine Time Breakdown", s_h2))
-        time_data = [
-            ["Phase",          "Time (hr)", "Notes"],
-            ["Warmup",         _f(mach_r.get("total_warmup_hr", 0), 2),        f"{results.get('num_builds', 0)} builds × warmup"],
-            ["Laser Scan",     _f(mach_r.get("total_scan_hr", 0), 2),          "Deposition time only"],
-            ["Recoating",      _f(mach_r.get("total_recoating_hr", 0), 2),     "Powder spreading overhead"],
-            ["Cooldown",       _f(mach_r.get("total_cooldown_hr", 0), 2),      f"{results.get('num_builds', 0)} builds × cooldown"],
-            ["Build Exchange", _f(mach_r.get("total_build_exchange_hr", 0), 2), "Setup + removal"],
-            ["TOTAL",          _f(mach_r.get("total_machine_time_hr", 0), 2),  ""],
+        story.append(_sec_hdr("Machine Time Breakdown"))
+        story.append(Spacer(1, 6))
+
+        time_hdrs = [Paragraph(h, s_tbl_hdr)
+                     for h in ["Phase", "Time (hr)", "Notes"]]
+        time_rows = [
+            ("Warmup",         _f(mach_r.get("total_warmup_hr", 0), 2),
+                                f"{results.get('num_builds', 0)} builds × warmup time"),
+            ("Laser Scan",     _f(mach_r.get("total_scan_hr", 0), 2),
+                                "Laser deposition time"),
+            ("Recoating",      _f(mach_r.get("total_recoating_hr", 0), 2),
+                                "Powder spreading overhead"),
+            ("Cooldown",       _f(mach_r.get("total_cooldown_hr", 0), 2),
+                                f"{results.get('num_builds', 0)} builds × cooldown time"),
+            ("Build Exchange", _f(mach_r.get("total_build_exchange_hr", 0), 2),
+                                "Setup and plate removal"),
+            ("TOTAL",          _f(mach_r.get("total_machine_time_hr", 0), 2), ""),
         ]
-        t3 = Table(time_data, colWidths=[col_w * 0.28, col_w * 0.2, col_w * 0.52])
-        s3 = _tbl_style(nrows=len(time_data))
-        l3 = len(time_data) - 1
-        s3.add('BACKGROUND', (0, l3), (-1, l3), NAVY)
-        s3.add('TEXTCOLOR',  (0, l3), (-1, l3), WHITE)
-        s3.add('FONTNAME',   (0, l3), (-1, l3), 'Helvetica-Bold')
-        t3.setStyle(s3)
-        story.append(KeepTogether([t3]))
-        story.append(Spacer(1, 10))
+        t_data = [time_hdrs] + [list(r) for r in time_rows]
+        t_tbl = Table(t_data, colWidths=[COL_W*0.22, COL_W*0.16, COL_W*0.62])
+        t_ts = _base_ts(nrows=len(t_data))
+        tl = len(t_data) - 1
+        t_ts.add('BACKGROUND', (0, tl), (-1, tl), NAVY)
+        t_ts.add('TEXTCOLOR',  (0, tl), (-1, tl), WHITE)
+        t_ts.add('FONTNAME',   (0, tl), (-1, tl), 'Helvetica-Bold')
+        t_tbl.setStyle(t_ts)
+        story.append(KeepTogether([t_tbl]))
+        story.append(Spacer(1, 12))
 
-        # ── Two-column layout: Material + Part/Production ─────────────────────
+        # ═════════════════════════════════════════════════════════════════════
+        # MATERIAL & PART DETAILS (two-column)
+        # ═════════════════════════════════════════════════════════════════════
         mat_r = results.get("material", {})
-        story.append(Paragraph("Material & Part Details", s_h2))
+        story.append(_sec_hdr("Material & Part Details"))
+        story.append(Spacer(1, 6))
 
+        half = (COL_W - 8) / 2
         mat_rows = [
             ("Total Part Material",    _f(mat_r.get("total_part_material_kg", 0), 3, " kg")),
             ("Total Support Material", _f(mat_r.get("total_support_material_kg", 0), 3, " kg")),
@@ -981,55 +1078,66 @@ def export_to_pdf(
             ("Material Cost",          _c(mat_r.get("cost", 0))),
         ]
         part_rows = [
-            ("Part File",              inputs.get("part_file_name", "–")),
-            ("Volume",                 _f(inputs.get("part_volume_cm3"), 3, " cm³")),
-            ("Height (build dir.)",    _f((inputs.get("part_height_cm") or 0) * 10, 2, " mm")),
-            ("Mass",                   _f(inputs.get("part_mass_kg"), 4, " kg")),
-            ("Support Fraction",       _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
-            ("Production Run",         f"{prod_run:,} parts"),
+            ("Part File",           inputs.get("part_file_name", "–")),
+            ("Volume",              _f(inputs.get("part_volume_cm3"), 3, " cm³")),
+            ("Height (build dir.)", _f((inputs.get("part_height_cm") or 0) * 10, 2, " mm")),
+            ("Mass",                _f(inputs.get("part_mass_kg"), 4, " kg")),
+            ("Support Fraction",    _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
+            ("Production Run",      f"{prod_run:,} parts"),
         ]
-        half = col_w / 2 - 3
         two_col = Table(
-            [[_section_tbl(mat_rows, [half * 0.52, half * 0.48]),
-              _section_tbl(part_rows, [half * 0.52, half * 0.48])]],
-            colWidths=[half + 6, half]
+            [[_kv_tbl(mat_rows,  [half * 0.48, half * 0.52]),
+              _kv_tbl(part_rows, [half * 0.48, half * 0.52])]],
+            colWidths=[half + 4, half + 4],
         )
         two_col.setStyle(TableStyle([
             ('VALIGN',       (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING',  (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (0, -1),  4),
+            ('RIGHTPADDING', (1, 0), (1, -1),  0),
         ]))
         story.append(KeepTogether([two_col]))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 12))
 
-        # ── Machine & Process ─────────────────────────────────────────────────
-        story.append(Paragraph("Machine & Process Configuration", s_h2))
+        # ═════════════════════════════════════════════════════════════════════
+        # MACHINE & PROCESS CONFIGURATION
+        # ═════════════════════════════════════════════════════════════════════
+        story.append(_sec_hdr("Machine & Process Configuration"))
+        story.append(Spacer(1, 6))
+
         machine_rows = [
-            ("Machine Name",         inputs.get("machine_name", "–")),
+            ("Machine",              inputs.get("machine_name", "–")),
             ("Manufacturer",         inputs.get("machine_manufacturer", "–")),
             ("Build Plate",          inputs.get("machine_build_plate", "–")),
             ("Build Height",         _f(inputs.get("machine_build_height_mm"), 0, " mm")),
             ("Build Area",           _f(inputs.get("machine_build_area_cm2"), 1, " cm²")),
-            ("Machine Cost",         _c(inputs.get("machine_cost_usd", 0))),
+            ("Machine Purchase Cost",_c(inputs.get("machine_cost_usd", 0))),
             ("Number of Lasers",     str(inputs.get("machine_num_lasers", 1))),
             ("Laser Strategy",       inputs.get("laser_strategy", "single")),
-            ("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%")),
-            ("Material Build Rate",  _f(inputs.get("material_build_rate_cm3_hr"), 1, " cm³/hr")),
+            ("Material",             inputs.get("material_name", "–")),
+            ("Material Cost / kg",   _c(inputs.get("material_cost_per_kg", 0))),
+            ("Build Rate",           _f(inputs.get("material_build_rate_cm3_hr"), 1, " cm³/hr")),
             ("Layer Thickness",      _f(inputs.get("layer_thickness_um"), 0, " µm")),
             ("Packing Policy",       inputs.get("machine_packing_policy", "2D")),
             ("Packing Fraction",     _f((inputs.get("machine_packing_fraction") or 0.9) * 100, 0, "%")),
+            ("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%")),
         ]
-        story.append(KeepTogether([_section_tbl(machine_rows)]))
-        story.append(Spacer(1, 10))
+        story.append(KeepTogether([_kv_tbl(machine_rows)]))
+        story.append(Spacer(1, 12))
 
-        # ── Quantity curve table ───────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════════════
+        # QUANTITY CURVE — sampled data table
+        # ═════════════════════════════════════════════════════════════════════
         if quantity_curve:
-            story.append(Paragraph("Cost vs Quantity (selected data points)", s_h2))
+            story.append(_sec_hdr("Cost vs Quantity — Selected Data Points"))
+            story.append(Spacer(1, 6))
             step = max(1, len(quantity_curve) // 15)
-            pts = quantity_curve[::step]
+            pts  = quantity_curve[::step]
             if quantity_curve[-1] not in pts:
                 pts.append(quantity_curve[-1])
-            qc_data = [["Qty", "Cost/Part", "Total Cost", "Parts/Build", "# Builds"]]
+            qc_hdrs = [Paragraph(h, s_tbl_hdr)
+                       for h in ["Qty", "Cost / Part", "Total Cost", "Parts / Build", "# Builds"]]
+            qc_data = [qc_hdrs]
             for pt in pts:
                 qc_data.append([
                     str(pt.get("quantity", "")),
@@ -1038,11 +1146,15 @@ def export_to_pdf(
                     str(pt.get("parts_per_build", "")),
                     str(pt.get("num_builds", "")),
                 ])
-            qt = Table(qc_data, colWidths=[col_w * 0.12, col_w * 0.22, col_w * 0.24, col_w * 0.22, col_w * 0.20])
-            qt.setStyle(_tbl_style(nrows=len(qc_data)))
+            qt = Table(qc_data,
+                       colWidths=[COL_W*0.12, COL_W*0.22, COL_W*0.24, COL_W*0.22, COL_W*0.20])
+            qt.setStyle(_base_ts(nrows=len(qc_data)))
             story.append(KeepTogether([qt]))
 
-        doc.build(story)
+        # ═════════════════════════════════════════════════════════════════════
+        # BUILD
+        # ═════════════════════════════════════════════════════════════════════
+        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
         return output_path
     except Exception as e:
         raise Exception(f"PDF export failed: {str(e)}")
