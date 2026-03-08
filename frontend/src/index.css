@@ -3,108 +3,128 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 
   body {
-    background-color: #0a0d14;
-    color: #e2e8f0;
+    background-color: #080b12;
+    color: #f1f5f9;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #0f1420;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #1e2a45;
-    border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #3b82f6;
-  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #1f2d45; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #4f8ef7; }
+
+  h1, h2, h3, h4 { letter-spacing: -0.02em; }
 }
 
 @layer components {
+
+  /* ── Cards ────────────────────────────────────────────────── */
   .card {
-    @apply bg-bg-card border border-bg-border rounded-xl p-5;
+    @apply bg-bg-card border border-bg-border rounded-2xl p-5 shadow-card;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-accent-blue/40 hover:shadow-card-hover hover:-translate-y-0.5;
   }
 
+  /* ── Buttons ──────────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-accent-blue hover:bg-blue-500 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2
+           bg-gradient-to-r from-accent-blue to-accent-cyan
+           hover:from-blue-500 hover:to-accent-cyan
+           text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 shadow-glow-blue
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
   }
-
   .btn-secondary {
-    @apply bg-bg-hover border border-bg-border hover:border-accent-blue text-text-primary font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2;
+    @apply inline-flex items-center gap-2
+           bg-bg-subtle border border-bg-border
+           hover:border-accent-blue/50 hover:bg-bg-hover
+           text-text-primary font-medium px-4 py-2.5 rounded-xl
+           transition-all duration-200;
   }
-
   .btn-danger {
-    @apply bg-red-900/30 hover:bg-red-900/50 border border-red-800 text-red-400 font-medium px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2;
+    @apply inline-flex items-center gap-2
+           bg-danger/10 border border-danger/30
+           hover:bg-danger/20 hover:border-danger/50
+           text-danger font-medium px-4 py-2.5 rounded-xl
+           transition-all duration-200;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2
+           text-text-secondary hover:text-text-primary
+           hover:bg-bg-hover px-3 py-2 rounded-lg
+           transition-all duration-150;
   }
 
+  /* ── Form elements ────────────────────────────────────────── */
   .input-field {
-    @apply bg-bg-secondary border border-bg-border text-text-primary rounded-lg px-3 py-2 w-full focus:outline-none focus:border-accent-blue transition-colors text-sm placeholder-text-muted;
+    @apply bg-bg-secondary border border-bg-border text-text-primary
+           rounded-xl px-4 py-2.5 w-full
+           focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10
+           transition-all duration-150 text-sm placeholder:text-text-muted;
   }
-
   .label {
-    @apply text-text-secondary text-xs font-medium uppercase tracking-wide mb-1 block;
+    @apply text-text-muted text-xs font-semibold uppercase tracking-widest mb-1.5 block;
   }
 
-  .badge {
-    @apply px-2 py-0.5 rounded text-xs font-medium;
+  /* ── Typography utilities ─────────────────────────────────── */
+  .gradient-text {
+    @apply bg-gradient-to-r from-accent-blue to-accent-cyan bg-clip-text text-transparent;
   }
-
+  .gradient-text-purple {
+    @apply bg-gradient-to-r from-accent-purple to-accent-blue bg-clip-text text-transparent;
+  }
+  .page-title {
+    @apply text-3xl font-extrabold text-text-primary tracking-tight;
+  }
+  .page-subtitle {
+    @apply text-text-secondary text-sm mt-1.5;
+  }
   .section-title {
-    @apply text-text-primary font-semibold text-base mb-4;
+    @apply text-text-primary font-bold text-sm uppercase tracking-wider mb-4;
   }
 
+  /* ── Stats / KPI ──────────────────────────────────────────── */
   .stat-card {
     @apply card flex flex-col gap-1;
   }
-
   .stat-value {
-    @apply text-2xl font-bold text-text-primary;
+    @apply text-3xl font-extrabold text-text-primary tracking-tight;
   }
-
   .stat-label {
-    @apply text-text-muted text-xs uppercase tracking-wide;
+    @apply text-text-muted text-xs font-semibold uppercase tracking-widest;
+  }
+
+  /* ── Badges ───────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold;
+  }
+
+  /* ── Hero / CTA card ──────────────────────────────────────── */
+  .hero-card {
+    @apply relative overflow-hidden rounded-2xl p-6
+           bg-gradient-to-br from-accent-blue/10 via-bg-card to-accent-cyan/5
+           border border-accent-blue/20 shadow-glow-blue;
   }
 }
 
-/* Wizard step animation */
-.step-enter {
-  opacity: 0;
-  transform: translateX(20px);
-}
-.step-enter-active {
-  opacity: 1;
-  transform: translateX(0);
-  transition: opacity 200ms, transform 200ms;
-}
-.step-exit {
-  opacity: 1;
-}
-.step-exit-active {
-  opacity: 0;
-  transition: opacity 200ms;
-}
+/* ── Step animations ──────────────────────────────────────────── */
+.step-enter { opacity: 0; transform: translateX(16px); }
+.step-enter-active { opacity: 1; transform: translateX(0); transition: opacity 200ms, transform 200ms; }
+.step-exit { opacity: 1; }
+.step-exit-active { opacity: 0; transition: opacity 150ms; }
 
-/* Glow effect for accent elements */
-.glow-blue {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
-}
+/* ── Glow effects ─────────────────────────────────────────────── */
+.glow-blue   { box-shadow: 0 0 28px rgba(79,142,247,0.18); }
+.glow-cyan   { box-shadow: 0 0 28px rgba(6,200,232,0.15); }
+.glow-purple { box-shadow: 0 0 28px rgba(155,109,255,0.18); }
 
-/* Number input arrows hidden */
+/* ── Number inputs ────────────────────────────────────────────── */
 input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type='number'] {
-  -moz-appearance: textfield;
-}
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; }

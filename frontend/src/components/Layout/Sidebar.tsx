@@ -1,56 +1,53 @@
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, PlusCircle, Clock, Cpu, FlaskConical, Settings, Zap } from 'lucide-react'
-import { cn } from '../../lib/utils'
 
 const nav = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/analysis', icon: PlusCircle, label: 'New Analysis' },
-  { to: '/history', icon: Clock, label: 'Projects' },
-  { to: '/machines', icon: Cpu, label: 'Machines' },
-  { to: '/materials', icon: FlaskConical, label: 'Materials' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/',          icon: LayoutDashboard, label: 'Dashboard',    end: true },
+  { to: '/analysis',  icon: PlusCircle,      label: 'New Analysis' },
+  { to: '/history',   icon: Clock,           label: 'Projects' },
+  { to: '/machines',  icon: Cpu,             label: 'Machines' },
+  { to: '/materials', icon: FlaskConical,    label: 'Materials' },
+  { to: '/settings',  icon: Settings,        label: 'Settings' },
 ]
 
 export function Sidebar() {
   return (
-    <aside className="w-56 shrink-0 flex flex-col bg-bg-secondary border-r border-bg-border h-screen sticky top-0">
+    <aside className="w-60 shrink-0 flex flex-col h-screen sticky top-0 bg-bg-secondary border-r border-bg-border">
+
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-bg-border">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-blue to-accent-cyan flex items-center justify-center">
-          <Zap size={16} className="text-white" />
+      <div className="flex items-center gap-3 px-5 h-16 border-b border-bg-border shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-blue to-accent-cyan flex items-center justify-center shadow-glow-blue shrink-0">
+          <Zap size={15} className="text-white" strokeWidth={2.5} />
         </div>
-        <div>
-          <div className="text-text-primary font-semibold text-sm leading-tight">Metal AM</div>
-          <div className="text-text-muted text-xs">Cost Analyzer</div>
+        <div className="leading-tight">
+          <div className="text-text-primary font-bold text-sm tracking-tight">Metal AM</div>
+          <div className="text-text-muted text-xs font-medium">Cost Analyzer</div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
         {nav.map(({ to, icon: Icon, label, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150',
+          <NavLink key={to} to={to} end={end}>
+            {({ isActive }) => (
+              <span className={[
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer select-none',
                 isActive
-                  ? 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
-              )
-            }
-          >
-            <Icon size={16} />
-            {label}
+                  ? 'bg-accent-blue/10 text-accent-blue border border-accent-blue/25 glow-blue'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-hover border border-transparent',
+              ].join(' ')}>
+                <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className="shrink-0" />
+                {label}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-bg-border">
-        <p className="text-text-muted text-xs">Inspired by MIT Cost Model</p>
-        <p className="text-text-muted text-xs">LPBF / SLM v1.0</p>
+      <div className="px-5 py-4 border-t border-bg-border">
+        <div className="text-text-muted text-xs font-medium">MIT Cost Model · LPBF / SLM</div>
+        <div className="text-text-muted text-xs opacity-40 mt-0.5">v1.0</div>
       </div>
     </aside>
   )
