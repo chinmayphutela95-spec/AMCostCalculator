@@ -624,34 +624,45 @@ class ExportRequest(BaseModel):
     inputs: dict
     results: dict
     format: str = "excel"  # "excel" or "pdf"
+    quantity_curve: Optional[list] = None
+
+
+def _do_export(project_name: str, inputs: dict, results: dict, fmt: str, quantity_curve=None):
+    from fastapi.responses import FileResponse
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in project_name)
+
+    if fmt == "pdf":
+        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.pdf")
+        export_to_pdf(project_name, inputs, results, output_path, quantity_curve=quantity_curve)
+        return FileResponse(output_path, media_type="application/pdf", filename=f"{safe_name}.pdf")
+    else:
+        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.xlsx")
+        export_to_excel(project_name, inputs, results, output_path, quantity_curve=quantity_curve)
+        return FileResponse(
+            output_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"{safe_name}.xlsx",
+        )
 
 
 @app.post("/api/export")
 def export_report(req: ExportRequest):
-    from fastapi.responses import FileResponse
+    return _do_export(req.project_name, req.inputs, req.results, req.format, req.quantity_curve)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = "".join(
-        c if c.isalnum() or c in "-_" else "_"
-        for c in req.project_name
-    )
 
-    if req.format == "pdf":
-        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.pdf")
-        export_to_pdf(req.project_name, req.inputs, req.results, output_path)
-        return FileResponse(
-            output_path,
-            media_type="application/pdf",
-            filename=f"{safe_name}.pdf"
-        )
-    else:
-        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.xlsx")
-        export_to_excel(req.project_name, req.inputs, req.results, output_path)
-        return FileResponse(
-            output_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=f"{safe_name}.xlsx"
-        )
+@app.get("/api/projects/{project_id}/export")
+def export_project(project_id: int, format: str = "excel", db: Session = Depends(get_db)):
+    p = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        inputs  = json.loads(p.inputs_json  or "{}")
+        results = json.loads(p.results_json or "{}")
+        quantity_curve = inputs.pop("quantity_curve", None)
+    except Exception:
+        inputs, results, quantity_curve = {}, {}, None
+    return _do_export(p.name, inputs, results, format, quantity_curve)
 
 
 # ============================================================

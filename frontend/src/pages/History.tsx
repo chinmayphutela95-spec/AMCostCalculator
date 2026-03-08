@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Trash2, FolderOpen, Clock, ChevronRight, X } from 'lucide-react'
-import { projectsApi } from '../lib/api'
+import { Trash2, FolderOpen, Clock, ChevronRight, X, Download } from 'lucide-react'
+import { projectsApi, exportApi } from '../lib/api'
 import { formatCurrency } from '../lib/utils'
 import type { Project } from '../types'
 
@@ -18,6 +18,20 @@ export function HistoryPage() {
     await projectsApi.delete(id)
     load()
     if (selected?.id === id) setSelected(null)
+  }
+
+  const downloadExport = async (id: number, name: string, format: 'excel' | 'pdf') => {
+    try {
+      const resp = await exportApi.exportProject(id, format)
+      const blob = new Blob([resp.data], { type: resp.headers['content-type'] })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+      a.download = `${safe}.${format === 'excel' ? 'xlsx' : 'pdf'}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) { console.error(e) }
   }
 
   return (
@@ -102,6 +116,20 @@ export function HistoryPage() {
                   <div className="flex justify-between"><span className="text-text-muted">Builds</span><span className="text-text-primary">{results.num_builds ?? '–'}</span></div>
                   {inputs.machine_name && <div className="flex justify-between"><span className="text-text-muted">Machine</span><span className="text-text-primary truncate ml-2">{inputs.machine_name}</span></div>}
                   {inputs.material_name && <div className="flex justify-between"><span className="text-text-muted">Material</span><span className="text-text-primary truncate ml-2">{inputs.material_name}</span></div>}
+                </div>
+                <div className="mt-4 pt-4 border-t border-bg-border flex gap-2">
+                  <button
+                    onClick={() => downloadExport(selected.id, selected.name, 'excel')}
+                    className="btn-secondary flex-1 text-xs"
+                  >
+                    <Download size={13} /> Excel
+                  </button>
+                  <button
+                    onClick={() => downloadExport(selected.id, selected.name, 'pdf')}
+                    className="btn-secondary flex-1 text-xs"
+                  >
+                    <Download size={13} /> PDF
+                  </button>
                 </div>
               </div>
             )

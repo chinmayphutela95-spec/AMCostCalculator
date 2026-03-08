@@ -170,6 +170,60 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     } finally { setAiLoading(false) }
   }
 
+  const buildInputsPayload = () => {
+    const buildPlate = m?.build_plate_shape === 'circular'
+      ? `⌀${(m.build_plate_diameter || 0) * 10}mm`
+      : `${(m?.build_plate_width || 0) * 10}×${(m?.build_plate_length || 0) * 10}mm`
+    return {
+      // Machine
+      machine_name: m?.name,
+      machine_manufacturer: m?.manufacturer,
+      machine_build_plate: buildPlate,
+      machine_build_height_mm: (m?.build_height || 0) * 10,
+      machine_build_area_cm2: m?.build_area,
+      machine_cost_usd: m?.machine_cost,
+      machine_num_lasers: m?.num_lasers ?? 1,
+      machine_packing_policy: m?.packing_policy,
+      machine_packing_fraction: m?.packing_fraction,
+      machine_uptime: m?.uptime,
+      machine_recycling_fraction: m?.recycling_fraction,
+      // Material
+      material_name: mat?.name,
+      material_alloy: mat?.alloy_designation,
+      material_category: mat?.category,
+      material_cost_per_kg: state.materialCostPerKg,
+      material_density_g_cm3: state.materialDensity,
+      layer_thickness_um: state.layerThicknessUm,
+      material_build_rate_cm3_hr: state.materialBuildRate,
+      // Part geometry
+      part_file_name: state.partFileName,
+      part_volume_cm3: state.partVolume,
+      part_height_cm: state.partHeight,
+      part_projected_area_cm2: state.partProjectedArea,
+      part_mass_kg: state.partVolume * state.materialDensity / 1000,
+      support_pct_of_mass: state.supportPctOfMass,
+      build_direction: state.buildDirection,
+      elevation_mm: state.elevationMm ?? 0,
+      // Production & process
+      production_run: state.productionRun,
+      laser_strategy: state.laserStrategy,
+      lasers_per_part: state.lasersPerPart,
+      recoating_efficiency: state.recoatingEfficiency ?? 0.75,
+      parts_per_build_override: state.partsPerBuildOverride ?? null,
+      // Post-processing
+      heat_treatment_enabled: state.heatTreatmentEnabled,
+      heat_treatment_cost_per_build: state.heatTreatmentCostPerBuild,
+      part_separation_enabled: state.partSeparationEnabled,
+      part_separation_cost_per_part: state.partSeparationCostPerPart,
+      hip_enabled: state.hipEnabled,
+      hip_cost_per_part: state.hipCostPerPart,
+      surface_treatment_enabled: state.surfaceTreatmentEnabled,
+      surface_treatment_cost_per_part: state.surfaceTreatmentCostPerPart,
+      ndt_enabled: state.ndtEnabled,
+      ndt_cost_per_part: state.ndtCostPerPart,
+    }
+  }
+
   const saveProject = async () => {
     if (!state.result || !projectName) return
     setSaving(true)
@@ -178,17 +232,8 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
         name: projectName,
         part_file_name: state.partFileName,
         inputs_json: JSON.stringify({
-          part_volume: state.partVolume,
-          part_height: state.partHeight,
-          part_projected_area: state.partProjectedArea,
-          support_pct_of_mass: state.supportPctOfMass,
-          production_run: state.productionRun,
-          machine_id: state.selectedMachineId,
-          machine_name: m?.name,
-          material_id: state.selectedMaterialId,
-          material_name: mat?.name,
-          material_cost_per_kg: state.materialCostPerKg,
-          material_density: state.materialDensity,
+          ...buildInputsPayload(),
+          quantity_curve: state.quantityCurve,
         }),
         results_json: JSON.stringify(state.result),
         ai_insights_json: JSON.stringify(state.aiInsights || {}),
@@ -203,9 +248,10 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     try {
       const resp = await exportApi.export({
         project_name: projectName || 'cost_analysis',
-        inputs: { production_run: state.productionRun, machine: m?.name, material: mat?.name },
+        inputs: buildInputsPayload(),
         results: state.result,
         format,
+        quantity_curve: state.quantityCurve,
       })
       const blob = new Blob([resp.data], { type: resp.headers['content-type'] })
       const url = URL.createObjectURL(blob)

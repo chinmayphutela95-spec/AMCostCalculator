@@ -52,6 +52,8 @@ export const settingsApi = {
 
 export const exportApi = {
   export: (data: any) => api.post('/export', data, { responseType: 'blob' }).then(r => r),
+  exportProject: (id: number, format: 'excel' | 'pdf') =>
+    api.get(`/projects/${id}/export`, { params: { format }, responseType: 'blob' }).then(r => r),
 }
 
 export default api
