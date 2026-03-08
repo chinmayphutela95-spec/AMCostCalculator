@@ -40,6 +40,12 @@ def _pct_float(v, total) -> float:
 
 # ─── Chart helpers (matplotlib → PNG bytes) ───────────────────────────────────
 
+_CHART_COLORS = [
+    "#2563EB", "#0891B2", "#7C3AED", "#D97706",
+    "#059669", "#DC2626", "#EA580C", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899",
+]
+
+
 def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
     import matplotlib
     matplotlib.use("Agg")
@@ -47,25 +53,21 @@ def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
     import matplotlib.ticker as mticker
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor("#0f1623")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("#F8FAFC")
 
-    default_colors = [
-        "#3b82f6", "#06b6d4", "#8b5cf6", "#f59e0b",
-        "#10b981", "#ef4444", "#f97316", "#a78bfa", "#34d399", "#fb923c", "#e879f9"
-    ]
-    bar_colors = colors or default_colors[:len(labels)]
+    bar_colors = colors or _CHART_COLORS[:len(labels)]
 
     bars = ax.bar(labels, values, color=bar_colors, width=0.6, zorder=3)
-    ax.set_title(title, color="white", fontsize=11, pad=10, fontweight="bold")
-    ax.tick_params(colors="white", labelsize=8)
+    ax.set_title(title, color="#1E293B", fontsize=11, pad=10, fontweight="bold")
+    ax.tick_params(colors="#475569", labelsize=8)
     ax.xaxis.set_tick_params(rotation=30)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
     for spine in ax.spines.values():
-        spine.set_edgecolor("#1e2a45")
-    ax.yaxis.set_tick_params(colors="#94a3b8")
-    ax.xaxis.set_tick_params(colors="#94a3b8")
-    ax.grid(axis="y", color="#1e2a45", linestyle="--", linewidth=0.7, zorder=0)
+        spine.set_edgecolor("#CBD5E1")
+    ax.yaxis.set_tick_params(colors="#475569")
+    ax.xaxis.set_tick_params(colors="#475569")
+    ax.grid(axis="y", color="#E2E8F0", linestyle="--", linewidth=0.7, zorder=0)
     ax.set_xlabel("")
 
     for bar, val in zip(bars, values):
@@ -74,12 +76,12 @@ def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() * 1.02,
                 f"${val:,.0f}",
-                ha="center", va="bottom", color="white", fontsize=7, fontweight="bold"
+                ha="center", va="bottom", color="#334155", fontsize=7, fontweight="bold"
             )
 
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
+    fig.savefig(buf, format="png", dpi=150, facecolor="white")
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -90,38 +92,35 @@ def _make_pie_chart(labels, values, title="", figsize=(5, 3.8)):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    colors = [
-        "#3b82f6", "#06b6d4", "#8b5cf6", "#f59e0b",
-        "#10b981", "#ef4444", "#f97316", "#a78bfa", "#34d399", "#fb923c"
-    ]
-    filtered = [(l, v, c) for l, v, c in zip(labels, values, colors[:len(labels)]) if v > 0]
+    filtered = [(l, v, c) for l, v, c in zip(labels, values, _CHART_COLORS[:len(labels)]) if v > 0]
     if not filtered:
         return None
     fl, fv, fc = zip(*filtered)
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor("#0f1623")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
 
     wedges, texts, autotexts = ax.pie(
         fv, labels=None, colors=fc, autopct="%1.1f%%",
         startangle=140, pctdistance=0.78,
-        wedgeprops={"linewidth": 0.5, "edgecolor": "#0f1623"}
+        wedgeprops={"linewidth": 0.5, "edgecolor": "white"}
     )
     for at in autotexts:
-        at.set_color("white")
+        at.set_color("#1E293B")
         at.set_fontsize(7)
+        at.set_fontweight("bold")
 
     ax.legend(
         wedges, [f"{l}" for l in fl],
         loc="center left", bbox_to_anchor=(1, 0.5),
-        fontsize=8, frameon=False, labelcolor="white"
+        fontsize=8, frameon=False, labelcolor="#334155"
     )
-    ax.set_title(title, color="white", fontsize=11, pad=8, fontweight="bold")
+    ax.set_title(title, color="#1E293B", fontsize=11, pad=8, fontweight="bold")
 
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor(), bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=150, facecolor="white", bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -142,28 +141,29 @@ def _make_line_chart(quantity_curve, current_qty=None, figsize=(9, 3.8)):
     mac = [pt.get("machine_cost",  0) for pt in quantity_curve]
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor("#0f1623")
-    ax.set_facecolor("#0f1623")
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("#F8FAFC")
 
-    ax.plot(qs, cpp, color="#3b82f6", linewidth=2,   label="Total $/part")
-    ax.plot(qs, mat, color="#06b6d4", linewidth=1.4, label="Material $/part", linestyle="--")
-    ax.plot(qs, mac, color="#8b5cf6", linewidth=1.4, label="Machine $/part",  linestyle="--")
+    ax.plot(qs, cpp, color="#2563EB", linewidth=2,   label="Total $/part")
+    ax.plot(qs, mat, color="#0891B2", linewidth=1.4, label="Material $/part", linestyle="--")
+    ax.plot(qs, mac, color="#7C3AED", linewidth=1.4, label="Machine $/part",  linestyle="--")
 
     if current_qty:
-        ax.axvline(current_qty, color="#f59e0b", linestyle=":", linewidth=1.2, label=f"Current qty ({current_qty:,})")
+        ax.axvline(current_qty, color="#D97706", linestyle=":", linewidth=1.5,
+                   label=f"Current qty ({current_qty:,})")
 
-    ax.set_title("Cost per Part vs Production Quantity", color="white", fontsize=11, pad=10, fontweight="bold")
-    ax.tick_params(colors="#94a3b8", labelsize=8)
+    ax.set_title("Cost per Part vs Production Quantity", color="#1E293B", fontsize=11, pad=10, fontweight="bold")
+    ax.tick_params(colors="#475569", labelsize=8)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
     for spine in ax.spines.values():
-        spine.set_edgecolor("#1e2a45")
-    ax.grid(color="#1e2a45", linestyle="--", linewidth=0.6)
-    ax.legend(fontsize=8, frameon=False, labelcolor="white")
+        spine.set_edgecolor("#CBD5E1")
+    ax.grid(color="#E2E8F0", linestyle="--", linewidth=0.6)
+    ax.legend(fontsize=8, frameon=True, framealpha=0.8, edgecolor="#E2E8F0", labelcolor="#334155")
 
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
+    fig.savefig(buf, format="png", dpi=150, facecolor="white")
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -260,35 +260,35 @@ def _render_stl_snapshot(
         ]
 
         # ── Figure ────────────────────────────────────────────────────────────
-        fig = plt.figure(figsize=figsize, facecolor="#0f1623")
+        fig = plt.figure(figsize=figsize, facecolor="white")
         ax  = fig.add_subplot(111, projection="3d")
-        ax.set_facecolor("#0f1623")
+        ax.set_facecolor("white")
 
         if len(normal_r) > 0:
-            pc = Poly3DCollection(verts[normal_r], alpha=0.72, linewidths=0)
-            pc.set_facecolor("#3b82f6")
+            pc = Poly3DCollection(verts[normal_r], alpha=0.70, linewidths=0)
+            pc.set_facecolor("#2563EB")
             ax.add_collection3d(pc)
 
         if len(overhang_r) > 0:
             pc2 = Poly3DCollection(verts[overhang_r], alpha=0.90, linewidths=0)
-            pc2.set_facecolor("#ef4444")
+            pc2.set_facecolor("#DC2626")
             ax.add_collection3d(pc2)
 
         for a, b in bbox_edges:
             ax.plot3D(*zip(corners[a], corners[b]),
-                      color="#f59e0b", linewidth=0.7, linestyle="--", alpha=0.75)
+                      color="#D97706", linewidth=0.8, linestyle="--", alpha=0.85)
 
         # Build plate surface
         pm = max(extents[0], extents[1]) * 0.10
         xs = np.array([[mins[0]-pm, maxs[0]+pm], [mins[0]-pm, maxs[0]+pm]])
         ys = np.array([[mins[1]-pm, mins[1]-pm], [maxs[1]+pm, maxs[1]+pm]])
         zs = np.full_like(xs, mins[2])
-        ax.plot_surface(xs, ys, zs, alpha=0.12, color="#06b6d4", linewidth=0)
+        ax.plot_surface(xs, ys, zs, alpha=0.15, color="#0891B2", linewidth=0)
 
         # Build-direction arrow
         ctr   = (mins + maxs) / 2
         arrow = extents[build_axis] * 0.45 * build_vec
-        ax.quiver(*ctr, *arrow, color="#10b981", linewidth=1.6, arrow_length_ratio=0.22)
+        ax.quiver(*ctr, *arrow, color="#059669", linewidth=1.8, arrow_length_ratio=0.22)
 
         # ── Axes / limits ─────────────────────────────────────────────────────
         pad = max(extents) * 0.04
@@ -296,14 +296,14 @@ def _render_stl_snapshot(
         ax.set_ylim(mins[1] - pad, maxs[1] + pad)
         ax.set_zlim(mins[2],       maxs[2] + extents[build_axis] * 0.55)
 
-        ax.tick_params(colors="#94a3b8", labelsize=6)
-        ax.set_xlabel("X (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
-        ax.set_ylabel("Y (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
+        ax.tick_params(colors="#64748B", labelsize=6)
+        ax.set_xlabel("X (mm)", color="#64748B", fontsize=6.5, labelpad=1)
+        ax.set_ylabel("Y (mm)", color="#64748B", fontsize=6.5, labelpad=1)
         bax = "XYZ"[build_axis]
-        ax.set_zlabel(f"{bax} / Build (mm)", color="#94a3b8", fontsize=6.5, labelpad=1)
+        ax.set_zlabel(f"{bax} / Build (mm)", color="#64748B", fontsize=6.5, labelpad=1)
         for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
             pane.fill = False
-            pane.set_edgecolor("#1e2a45")
+            pane.set_edgecolor("#E2E8F0")
 
         n_overhang = int(is_overhang.sum())
         pct_overhang = n_overhang / max(len(faces), 1) * 100
@@ -311,17 +311,18 @@ def _render_stl_snapshot(
             f"Bounding box: {extents[0]:.1f} × {extents[1]:.1f} × {extents[2]:.1f} mm"
             f"   |   Build: +{bax}"
             f"   |   Overhang faces: {n_overhang} ({pct_overhang:.1f}%)",
-            color="#94a3b8", fontsize=7.5, pad=6,
+            color="#334155", fontsize=7.5, pad=6,
         )
 
         legend_handles = [
-            Patch(facecolor="#3b82f6", label="Nominal surface"),
-            Patch(facecolor="#ef4444", label=f"Overhang (>{overhang_angle:.0f}°)"),
-            Patch(facecolor="#06b6d4", alpha=0.5, label="Build plate"),
-            Patch(facecolor="#10b981", label=f"Build dir. (+{bax})"),
+            Patch(facecolor="#2563EB", label="Nominal surface"),
+            Patch(facecolor="#DC2626", label=f"Overhang (>{overhang_angle:.0f}°)"),
+            Patch(facecolor="#0891B2", alpha=0.5, label="Build plate"),
+            Patch(facecolor="#059669", label=f"Build dir. (+{bax})"),
         ]
         ax.legend(handles=legend_handles, loc="upper left", fontsize=6.5,
-                  frameon=False, labelcolor="white", borderpad=0.2, handlelength=1.2)
+                  frameon=True, framealpha=0.8, edgecolor="#E2E8F0",
+                  labelcolor="#334155", borderpad=0.3, handlelength=1.2)
 
         ax.view_init(elev=22, azim=40)
 
@@ -911,7 +912,6 @@ def export_to_pdf(
         SUCCESS  = colors.HexColor("#059669")
         PURPLE   = colors.HexColor("#7C3AED")
         DIVIDER  = colors.HexColor("#CBD5E1")
-        CHART_BG = colors.HexColor("#0f1623")
 
         # ── Style factory ─────────────────────────────────────────────────────
         def _s(name, **kw):
@@ -1120,13 +1120,13 @@ def export_to_pdf(
                 stl_im = _chart_img(stl_png, COL_W - 8, *STL_FS)
                 stl_tbl = Table([[stl_im]], colWidths=[COL_W])
                 stl_tbl.setStyle(TableStyle([
-                    ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                    ('BACKGROUND',   (0, 0), (-1, -1), WHITE),
                     ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-                    ('LEFTPADDING',  (0, 0), (-1, -1), 4),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-                    ('TOPPADDING',   (0, 0), (-1, -1), 4),
-                    ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                    ('LEFTPADDING',  (0, 0), (-1, -1), 2),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                    ('TOPPADDING',   (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING',(0, 0), (-1, -1), 2),
                     ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
                 ]))
                 story.append(stl_tbl)
@@ -1141,7 +1141,7 @@ def export_to_pdf(
                 ]
                 gr_tbl = Table([geom_rows], colWidths=[COL_W / 4] * 4)
                 gr_tbl.setStyle(TableStyle([
-                    ('BACKGROUND',   (0, 0), (-1, -1), colors.HexColor("#111827")),
+                    ('BACKGROUND',   (0, 0), (-1, -1), ALT),
                     ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
                     ('TOPPADDING',   (0, 0), (-1, -1), 5),
@@ -1193,13 +1193,13 @@ def export_to_pdf(
                 ct = Table([[bar_im]], colWidths=[COL_W])
 
             ct.setStyle(TableStyle([
-                ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                ('BACKGROUND',   (0, 0), (-1, -1), WHITE),
                 ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-                ('LEFTPADDING',  (0, 0), (-1, -1), 3),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-                ('TOPPADDING',   (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 2),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                ('TOPPADDING',   (0, 0), (-1, -1), 2),
+                ('BOTTOMPADDING',(0, 0), (-1, -1), 2),
                 ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
             ]))
             story.append(ct)
@@ -1213,13 +1213,13 @@ def export_to_pdf(
                 lc_im = _chart_img(lc_png, COL_W - 8, *LC_FS)
                 lct = Table([[lc_im]], colWidths=[COL_W])
                 lct.setStyle(TableStyle([
-                    ('BACKGROUND',   (0, 0), (-1, -1), CHART_BG),
+                    ('BACKGROUND',   (0, 0), (-1, -1), WHITE),
                     ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
-                    ('LEFTPADDING',  (0, 0), (-1, -1), 4),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-                    ('TOPPADDING',   (0, 0), (-1, -1), 4),
-                    ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+                    ('LEFTPADDING',  (0, 0), (-1, -1), 2),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                    ('TOPPADDING',   (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING',(0, 0), (-1, -1), 2),
                     ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
                 ]))
                 story.append(lct)
