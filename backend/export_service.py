@@ -1350,32 +1350,6 @@ def export_to_pdf(
         story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
-        # QUANTITY CURVE — sampled data table
-        # ═════════════════════════════════════════════════════════════════════
-        if quantity_curve:
-            story.append(_sec_hdr("Cost vs Quantity — Selected Data Points"))
-            story.append(Spacer(1, 6))
-            step = max(1, len(quantity_curve) // 15)
-            pts  = quantity_curve[::step]
-            if quantity_curve[-1] not in pts:
-                pts.append(quantity_curve[-1])
-            qc_hdrs = [Paragraph(h, s_tbl_hdr)
-                       for h in ["Qty", "Cost / Part", "Total Cost", "Parts / Build", "# Builds"]]
-            qc_data = [qc_hdrs]
-            for pt in pts:
-                qc_data.append([
-                    str(pt.get("quantity", "")),
-                    _c(pt.get("cost_per_part", 0)),
-                    _c(pt.get("total_cost", 0)),
-                    str(pt.get("parts_per_build", "")),
-                    str(pt.get("num_builds", "")),
-                ])
-            qt = Table(qc_data,
-                       colWidths=[COL_W*0.12, COL_W*0.22, COL_W*0.24, COL_W*0.22, COL_W*0.20])
-            qt.setStyle(_base_ts(nrows=len(qc_data)))
-            story.append(KeepTogether([qt]))
-
-        # ═════════════════════════════════════════════════════════════════════
         # BUILD
         # ═════════════════════════════════════════════════════════════════════
         doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
