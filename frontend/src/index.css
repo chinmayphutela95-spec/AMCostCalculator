@@ -25,10 +25,14 @@
 
   /* ── Cards ────────────────────────────────────────────────── */
   .card {
-    @apply bg-bg-card border border-bg-border rounded-2xl p-5 shadow-card;
+    @apply bg-bg-card border border-bg-border rounded-2xl p-5;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
   }
   .card-hover {
-    @apply card transition-all duration-200 hover:border-accent-blue/40 hover:shadow-card-hover hover:-translate-y-0.5;
+    @apply card transition-all duration-200 hover:border-accent-blue/40 hover:-translate-y-0.5;
+  }
+  .card-hover:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
   }
 
   /* ── Buttons ──────────────────────────────────────────────── */
@@ -37,8 +41,12 @@
            bg-gradient-to-r from-accent-blue to-accent-cyan
            hover:from-blue-500 hover:to-accent-cyan
            text-white font-semibold px-5 py-2.5 rounded-xl
-           transition-all duration-200 shadow-glow-blue
-           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none;
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed;
+    box-shadow: 0 0 24px rgba(79,142,247,0.20);
+  }
+  .btn-primary:disabled {
+    box-shadow: none;
   }
   .btn-secondary {
     @apply inline-flex items-center gap-2
@@ -109,7 +117,8 @@
   .hero-card {
     @apply relative overflow-hidden rounded-2xl p-6
            bg-gradient-to-br from-accent-blue/10 via-bg-card to-accent-cyan/5
-           border border-accent-blue/20 shadow-glow-blue;
+           border border-accent-blue/20;
+    box-shadow: 0 0 28px rgba(79,142,247,0.18);
   }
 }
 
