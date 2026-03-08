@@ -487,7 +487,7 @@ def export_to_pdf(
         s_body     = _style("Body",     fontSize=9,  textColor=DARK,  leading=13)
         s_mono     = _style("Mono",     fontSize=9,  fontName="Courier", textColor=DARK)
 
-        def _tbl_style(header_rows=1, stripe=True):
+        def _tbl_style(header_rows=1, stripe=True, nrows=0):
             ts = TableStyle([
                 ('BACKGROUND',   (0, 0), (-1, header_rows - 1), BLUE),
                 ('TEXTCOLOR',    (0, 0), (-1, header_rows - 1), WHITE),
@@ -502,8 +502,8 @@ def export_to_pdf(
                 ('ALIGN',        (1, 0), (-1, -1), 'RIGHT'),
                 ('ALIGN',        (0, 0), (0, -1), 'LEFT'),
             ])
-            if stripe:
-                for i in range(header_rows, 200, 2):
+            if stripe and nrows > header_rows:
+                for i in range(header_rows, nrows, 2):
                     ts.add('BACKGROUND', (0, i), (-1, i), ALT)
             return ts
 
@@ -512,6 +512,7 @@ def export_to_pdf(
             col_widths = col_widths or [col_w * 0.5, col_w * 0.5]
             data = [[Paragraph(f"<b>{label}</b>", s_body), Paragraph(str(value), s_body)]
                     for label, value in rows]
+            n = len(data)
             tbl = Table(data, colWidths=col_widths)
             tbl.setStyle(TableStyle([
                 ('FONTSIZE',     (0, 0), (-1, -1), 8.5),
@@ -523,7 +524,7 @@ def export_to_pdf(
                 ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
                 ('ALIGN',        (1, 0), (-1, -1), 'RIGHT'),
                 ('ALIGN',        (0, 0), (0, -1), 'LEFT'),
-                *[('BACKGROUND', (0, i), (-1, i), ALT) for i in range(0, 200, 2)],
+                *[('BACKGROUND', (0, i), (-1, i), ALT) for i in range(0, n, 2)],
             ]))
             return tbl
 
@@ -557,7 +558,7 @@ def export_to_pdf(
             ["Total Machine Time", _f(results.get("machine", {}).get("total_machine_time_hr", 0), 1, " hr")],
         ]
         tbl = Table(summary_data, colWidths=[col_w * 0.55, col_w * 0.45])
-        tbl.setStyle(_tbl_style())
+        tbl.setStyle(_tbl_style(nrows=len(summary_data)))
         story.append(KeepTogether([tbl]))
         story.append(Spacer(1, 10))
 
@@ -584,7 +585,7 @@ def export_to_pdf(
         bk_data.append(["TOTAL", _c(total), _c(cpp), "100%"])
 
         tbl2 = Table(bk_data, colWidths=[col_w * 0.38, col_w * 0.22, col_w * 0.22, col_w * 0.18])
-        style2 = _tbl_style()
+        style2 = _tbl_style(nrows=len(bk_data))
         # Highlight total row
         last = len(bk_data) - 1
         style2.add('BACKGROUND', (0, last), (-1, last), NAVY)
@@ -607,7 +608,7 @@ def export_to_pdf(
             ["TOTAL",           _f(mach_r.get("total_machine_time_hr", 0), 2), ""],
         ]
         tbl3 = Table(time_data, colWidths=[col_w * 0.3, col_w * 0.22, col_w * 0.48])
-        style3 = _tbl_style()
+        style3 = _tbl_style(nrows=len(time_data))
         last3 = len(time_data) - 1
         style3.add('BACKGROUND', (0, last3), (-1, last3), NAVY)
         style3.add('TEXTCOLOR',  (0, last3), (-1, last3), WHITE)
@@ -630,7 +631,7 @@ def export_to_pdf(
             ["Material Cost",          _c(mat_r.get("cost", 0))],
         ]
         tbl4 = Table(mat_data, colWidths=[col_w * 0.55, col_w * 0.45])
-        tbl4.setStyle(_tbl_style())
+        tbl4.setStyle(_tbl_style(nrows=len(mat_data)))
         story.append(KeepTogether([tbl4]))
         story.append(Spacer(1, 10))
 
@@ -700,7 +701,7 @@ def export_to_pdf(
                     str(pt.get("num_builds", "")),
                 ])
             tblq = Table(qc_data, colWidths=[col_w * 0.12, col_w * 0.22, col_w * 0.24, col_w * 0.22, col_w * 0.20])
-            tblq.setStyle(_tbl_style())
+            tblq.setStyle(_tbl_style(nrows=len(qc_data)))
             story.append(KeepTogether([tblq]))
 
         doc.build(story)
