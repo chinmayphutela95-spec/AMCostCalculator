@@ -754,7 +754,14 @@ def export_to_excel(
             ("Layer Thickness",         _f(inputs.get("layer_thickness_um"), 0, " µm")),
             ("Laser Strategy",          inputs.get("laser_strategy", "single")),
             ("Lasers per Part",         str(inputs.get("lasers_per_part", 1))),
-            ("Recoating Efficiency",    _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%")),
+            *(
+                [
+                    ("Recoating Distance",  _f(inputs.get("recoating_distance_mm"), 0, " mm")),
+                    ("Recoating Speed",     _f(inputs.get("recoating_speed_mm_s"), 0, " mm/s")),
+                ]
+                if inputs.get("recoating_distance_mm") and inputs.get("recoating_speed_mm_s")
+                else [("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%"))]
+            ),
             ("Parts per Build Override", str(inputs.get("parts_per_build_override") or "Auto")),
         ])
         r4 = section_header(ws4, r4, "POST-PROCESSING INPUTS", 2, bg=HDR_XL)
@@ -1338,7 +1345,14 @@ def export_to_pdf(
             ("Layer Thickness",      _f(inputs.get("layer_thickness_um"), 0, " µm")),
             ("Packing Policy",       inputs.get("machine_packing_policy", "2D")),
             ("Packing Fraction",     _f((inputs.get("machine_packing_fraction") or 0.9) * 100, 0, "%")),
-            ("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%")),
+            *(
+                [
+                    ("Recoating Distance",  _f(inputs.get("recoating_distance_mm"), 0, " mm")),
+                    ("Recoating Speed",     _f(inputs.get("recoating_speed_mm_s"), 0, " mm/s")),
+                ]
+                if inputs.get("recoating_distance_mm") and inputs.get("recoating_speed_mm_s")
+                else [("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%"))]
+            ),
         ]
         story.append(KeepTogether([_kv_tbl(machine_rows)]))
         story.append(Spacer(1, 12))
