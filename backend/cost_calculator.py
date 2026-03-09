@@ -328,7 +328,7 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     # --- Cost Category 6: Post-Process (Support Removal) ---
     support_removal_time_per_part = (
         inputs.support_constant * math.sqrt(inputs.part_projected_area)
-        if inputs.part_projected_area > 0
+        if inputs.part_projected_area > 0 and inputs.support_pct_of_mass > 0
         else 0
     )
     support_removal_time = support_removal_time_per_part * inputs.production_run
