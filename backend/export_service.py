@@ -553,7 +553,7 @@ def export_to_excel(
             ("Material",      material_name),
             ("Production Run", f"{prod_run:,} parts"),
             ("Part Volume",   _f(inputs.get("part_volume_cm3"), 2, " cm³")),
-            ("Part Height",   _f((inputs.get("part_height_cm") or 0) * 10, 1, " mm")),
+            ("Part Height",   _f((inputs.get("part_height_cm") or 0) * 10 + (inputs.get("elevation_mm") or 0), 1, " mm")),
             ("Part Mass",     _f(inputs.get("part_mass_kg"), 3, " kg")),
             ("Support Frac.", _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
             ("Build Rate",    _f(inputs.get("material_build_rate_cm3_hr"), 1, " cm³/hr")),
@@ -811,11 +811,12 @@ def export_to_excel(
         r5 = kv_block(ws5, r5, [
             ("Part File",          inputs.get("part_file_name", "–")),
             ("Volume",             _f(inputs.get("part_volume_cm3"), 3, " cm³")),
-            ("Height (build dir.)", _f((inputs.get("part_height_cm") or 0) * 10, 2, " mm")),
+            ("Height (build dir.)", _f((inputs.get("part_height_cm") or 0) * 10 + (inputs.get("elevation_mm") or 0), 2, " mm")),
             ("Projected Area",     _f(inputs.get("part_projected_area_cm2"), 2, " cm²")),
             ("Mass (computed)",    _f(inputs.get("part_mass_kg"), 4, " kg")),
             ("Support Fraction",   _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
-            ("Elevation above Plate", _f(inputs.get("elevation_mm", 0), 0, " mm")),
+            ("  — Part geometry",  _f((inputs.get("part_height_cm") or 0) * 10, 2, " mm")),
+            ("  — Elevation gap",  _f(inputs.get("elevation_mm", 0), 0, " mm")),
         ])
         r5 = section_header(ws5, r5, "PRODUCTION", 2, bg=HDR_XL)
         r5 = kv_block(ws5, r5, [
@@ -1137,7 +1138,7 @@ def export_to_pdf(
                 geom_rows = [
                     Paragraph(f"<b>Volume:</b> {_f(inputs.get('part_volume_cm3'), 3)} cm³", s_label),
                     Paragraph(f"<b>Mass:</b> {_f(inputs.get('part_mass_kg'), 4)} kg", s_label),
-                    Paragraph(f"<b>Height:</b> {_f((inputs.get('part_height_cm') or 0)*10, 1)} mm", s_label),
+                    Paragraph(f"<b>Height:</b> {_f((inputs.get('part_height_cm') or 0)*10 + (inputs.get('elevation_mm') or 0), 1)} mm", s_label),
                     Paragraph(f"<b>Support est.:</b> {_f((inputs.get('support_pct_of_mass') or 0)*100, 1)}%", s_label),
                 ]
                 gr_tbl = Table([geom_rows], colWidths=[COL_W / 4] * 4)
@@ -1305,7 +1306,7 @@ def export_to_pdf(
         part_rows = [
             ("Part File",           inputs.get("part_file_name", "–")),
             ("Volume",              _f(inputs.get("part_volume_cm3"), 3, " cm³")),
-            ("Height (build dir.)", _f((inputs.get("part_height_cm") or 0) * 10, 2, " mm")),
+            ("Height (build dir.)", _f((inputs.get("part_height_cm") or 0) * 10 + (inputs.get("elevation_mm") or 0), 2, " mm")),
             ("Mass",                _f(inputs.get("part_mass_kg"), 4, " kg")),
             ("Support Fraction",    _f((inputs.get("support_pct_of_mass") or 0) * 100, 1, "%")),
             ("Production Run",      f"{prod_run:,} parts"),
