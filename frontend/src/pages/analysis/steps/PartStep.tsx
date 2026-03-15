@@ -887,12 +887,9 @@ export function PartStep({ state, update, onNext }: Props) {
             {[
               ['Volume', `${state.geometry.volume_cm3.toFixed(3)} cm³`],
               ['Bounding Box', `${state.geometry.bounding_box_mm.x.toFixed(1)}×${state.geometry.bounding_box_mm.y.toFixed(1)}×${state.geometry.bounding_box_mm.z.toFixed(1)} mm`],
-              [
-                `Height (${state.buildDirection.toUpperCase()})${(state.elevationMm ?? 0) > 0 ? ' +gap' : ''}`,
-                (state.elevationMm ?? 0) > 0
-                  ? `${(state.geometry.height_cm + (state.elevationMm ?? 0) / 10).toFixed(2)} cm`
-                  : `${state.geometry.height_cm.toFixed(2)} cm`
-              ],
+              (state.elevationMm ?? 0) > 0
+                ? [`Build Height (${state.buildDirection.toUpperCase()})`, `${(state.geometry.height_cm + (state.elevationMm ?? 0) / 10).toFixed(2)} cm`]
+                : [`Part Height (${state.buildDirection.toUpperCase()})`,  `${state.geometry.height_cm.toFixed(2)} cm`],
               ['Projected Area', `${state.geometry.projected_area_cm2.toFixed(2)} cm²`],
               ['Surface Area', `${state.geometry.surface_area_cm2.toFixed(2)} cm²`],
               ['Fill Density', `${(state.geometry.relative_density * 100).toFixed(1)}%`],
@@ -926,7 +923,7 @@ export function PartStep({ state, update, onNext }: Props) {
           <div className="space-y-3">
             {([
               ['Part Volume', 'partVolume', 'cm³'],
-              ['Height in Build Direction', 'partHeight', 'cm'],
+              ['Part Height', 'partHeight', 'cm'],
               ['Projected Area', 'partProjectedArea', 'cm²'],
             ] as const).map(([label, key, unit]) => (
               <div key={key}>
@@ -941,7 +938,7 @@ export function PartStep({ state, update, onNext }: Props) {
                 </div>
                 {key === 'partHeight' && (state.elevationMm ?? 0) > 0 && (
                   <p className="text-text-muted text-xs mt-0.5">
-                    + {state.elevationMm} mm gap → <span className="text-accent-blue font-mono">{((state[key] as number) + (state.elevationMm ?? 0) / 10).toFixed(2)} cm</span> effective (used for machine check)
+                    Build Height: <span className="text-accent-blue font-mono">{((state[key] as number) + (state.elevationMm ?? 0) / 10).toFixed(2)} cm</span> (part + {state.elevationMm} mm gap)
                   </p>
                 )}
               </div>
