@@ -306,9 +306,17 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
       {/* Top summary */}
       <div className="grid grid-cols-4 gap-4">
         <div className="stat-card col-span-1 border-accent-cyan/30 bg-accent-cyan/5">
-          <div className="stat-label text-accent-cyan">Cost per Part</div>
-          <div className="stat-value text-accent-cyan font-mono">{formatCurrency(r.cost_per_part, 2)}</div>
-          <div className="text-text-muted text-xs mt-1">@ {state.productionRun} parts</div>
+          <div className="stat-label text-accent-cyan">
+            {state.partsPerLayout > 1 ? 'Cost per Main Part' : 'Cost per Part'}
+          </div>
+          <div className="stat-value text-accent-cyan font-mono">
+            {formatCurrency(r.cost_per_part / (state.partsPerLayout || 1), 2)}
+          </div>
+          <div className="text-text-muted text-xs mt-1">
+            {state.partsPerLayout > 1
+              ? `${state.partsPerLayout} main parts/layout · ${formatCurrency(r.cost_per_part, 2)} per layout`
+              : `@ ${state.productionRun} parts`}
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Run Cost</div>

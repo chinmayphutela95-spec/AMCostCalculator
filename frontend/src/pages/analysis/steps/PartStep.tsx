@@ -1013,6 +1013,20 @@ export function PartStep({ state, update, onNext }: Props) {
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">parts</span>
               </div>
             </div>
+            <div>
+              <label className="label">Main Parts in This Layout</label>
+              <div className="relative">
+                <input
+                  type="number" step="1" min="1" className="input-field pr-14"
+                  value={state.partsPerLayout}
+                  onChange={e => update({ partsPerLayout: Math.max(1, Math.round(+e.target.value)) })}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">parts</span>
+              </div>
+              <p className="text-text-muted text-xs mt-1">
+                If the STL contains multiple parts (e.g. main parts + test coupons), enter the number of main parts. Cost per part will be divided accordingly.
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -166,6 +166,7 @@ export interface AnalysisState {
 
   // Production
   productionRun: number
+  partsPerLayout: number   // main parts in this STL (1 = single part; >1 = multi-part layout)
 
   // Machine
   selectedMachineId?: number

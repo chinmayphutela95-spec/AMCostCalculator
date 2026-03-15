@@ -23,6 +23,7 @@ const INITIAL: AnalysisState = {
   supportPctOfMass: 0.15,
   buildDirection: 'z',
   productionRun: 100,
+  partsPerLayout: 1,
   materialCostPerKg: 40,
   materialDensity: 7.99,
   heatTreatmentEnabled: false,
