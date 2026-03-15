@@ -342,6 +342,52 @@ function StlScene({ geometry, overhangAngle, elevationMm, showSupportVolume }: {
   )
 }
 
+// ─── Build direction helpers ──────────────────────────────────────────────────
+
+/**
+ * Computes the pre-rotation matrix to apply to the mesh geometry so that the
+ * chosen build direction ends up pointing as screen Y (up). The viewer always
+ * treats Y as up, so this keeps all downstream components direction-agnostic.
+ */
+function getBuildRotation(dir: string): THREE.Matrix4 {
+  const m = new THREE.Matrix4()
+  switch (dir.toLowerCase()) {
+    case 'y':   return m                                       // Y up — already correct
+    case '-y':  return m.makeRotationX(Math.PI)               // Y down → flip
+    case 'z':   return m.makeRotationX(Math.PI / 2)           // Z up → tilt forward
+    case '-z':  return m.makeRotationX(-Math.PI / 2)          // Z down
+    case 'x':   return m.makeRotationZ(-Math.PI / 2)          // X up
+    case '-x':  return m.makeRotationZ(Math.PI / 2)           // X down
+    default: {
+      // custom:nx,ny,nz — rotate build_vec to Y-up
+      let bv = new THREE.Vector3(0, 1, 0)
+      if (dir.startsWith('custom:')) {
+        const parts = dir.slice(7).split(',').map(Number)
+        if (parts.length === 3 && parts.every(p => !isNaN(p))) {
+          bv = new THREE.Vector3(...(parts as [number, number, number])).normalize()
+        }
+      }
+      const yUp = new THREE.Vector3(0, 1, 0)
+      const dot  = Math.max(-1, Math.min(1, bv.dot(yUp)))
+      if (Math.abs(dot - 1) < 1e-4) return new THREE.Matrix4()
+      if (Math.abs(dot + 1) < 1e-4) return new THREE.Matrix4().makeRotationX(Math.PI)
+      const axis  = new THREE.Vector3().crossVectors(bv, yUp).normalize()
+      const angle = Math.acos(dot)
+      return new THREE.Matrix4().makeRotationAxis(axis, angle)
+    }
+  }
+}
+
+/** Build a 'custom:nx,ny,nz' direction string from spherical angles (degrees). */
+function sphericalToDir(polarDeg: number, azimuthDeg: number): string {
+  const p = polarDeg   * Math.PI / 180
+  const a = azimuthDeg * Math.PI / 180
+  const nx = +(Math.sin(p) * Math.cos(a)).toFixed(6)
+  const ny = +(Math.sin(p) * Math.sin(a)).toFixed(6)
+  const nz = +(Math.cos(p)).toFixed(6)
+  return `custom:${nx},${ny},${nz}`
+}
+
 // ─── Main PartStep ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -350,7 +396,6 @@ interface Props {
   onNext: () => void
 }
 
-const AXIS_MAP = { x: 0, y: 1, z: 2 } as const
 
 const SUPPORT_PRESETS = [
   { label: 'Block',       density: 0.40, tip: 'Perforated block — dense, good for critical surfaces' },
@@ -371,6 +416,9 @@ export function PartStep({ state, update, onNext }: Props) {
   const [selectedPreset, setSelectedPreset] = useState('Block')
   const [customDensity, setCustomDensity] = useState('30')
   const [showSupportVolume, setShowSupportVolume] = useState(true)
+  const [showCustomDir, setShowCustomDir] = useState(false)
+  const [customPolar, setCustomPolar] = useState(0)
+  const [customAzimuth, setCustomAzimuth] = useState(0)
 
   const fileRef = useRef<File | null>(null)
   const loaderRef = useRef(new STLLoader())
@@ -435,19 +483,12 @@ export function PartStep({ state, update, onNext }: Props) {
   // Pre-rotate so the chosen build axis always points up (screen Y).
   // After this rotation all downstream components (plate, overhang, camera)
   // can unconditionally treat Y as the build direction.
-  const loadViewer = useCallback((file: File, axis: number) => {
+  const loadViewer = useCallback((file: File, direction: string) => {
     const url = URL.createObjectURL(file)
     loaderRef.current.load(url, (geo: THREE.BufferGeometry) => {
       geo.computeVertexNormals()
       geo.center()
-      if (axis === 0) {
-        // X up → rotate -90° around Z so model +X becomes screen +Y
-        geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(-Math.PI / 2))
-      } else if (axis === 2) {
-        // Z up → rotate +90° around X so model +Z becomes screen +Y
-        geo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2))
-      }
-      // Y up → no rotation needed (screen Y = model Y already)
+      geo.applyMatrix4(getBuildRotation(direction))
       geo.computeVertexNormals()
       geo.computeBoundingBox()
       setThreeGeo(geo)
@@ -460,7 +501,7 @@ export function PartStep({ state, update, onNext }: Props) {
     const file = files[0]
     if (!file) return
     fileRef.current = file
-    loadViewer(file, AXIS_MAP[state.buildDirection])
+    loadViewer(file, state.buildDirection)
     await parseOnServer(file, state.buildDirection)
   }, [state.buildDirection, parseOnServer, loadViewer])
 
@@ -468,7 +509,7 @@ export function PartStep({ state, update, onNext }: Props) {
   useEffect(() => {
     if (fileRef.current && state.partFileName) {
       parseOnServer(fileRef.current, state.buildDirection)
-      loadViewer(fileRef.current, AXIS_MAP[state.buildDirection])
+      loadViewer(fileRef.current, state.buildDirection)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.buildDirection])
@@ -550,26 +591,91 @@ export function PartStep({ state, update, onNext }: Props) {
           )}
 
           {/* Build direction */}
-          <div>
+          <div className="space-y-2">
             <label className="label">Build Direction — which axis points up during printing</label>
-            <div className="flex gap-2">
-              {(['x', 'y', 'z'] as const).map(d => (
-                <button
-                  key={d}
-                  onClick={() => update({ buildDirection: d })}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-mono font-bold border transition-colors flex items-center justify-center gap-1.5 ${
-                    state.buildDirection === d
-                      ? 'bg-accent-blue/10 border-accent-blue text-accent-blue'
-                      : 'border-bg-border text-text-secondary hover:border-accent-blue/40'
-                  }`}
-                >
-                  {d.toUpperCase()} up
-                  {parsing && state.buildDirection === d && <Loader2 size={11} className="animate-spin" />}
-                </button>
-              ))}
+            {/* 6 standard presets */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['+X', '+Y', '+Z', '-X', '-Y', '-Z'] as const).map(label => {
+                const dir = label.replace('+', '').toLowerCase()
+                const active = !showCustomDir && state.buildDirection === dir
+                return (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      setShowCustomDir(false)
+                      update({ buildDirection: dir })
+                    }}
+                    className={`py-2 rounded-lg text-sm font-mono font-bold border transition-colors flex items-center justify-center gap-1 ${
+                      active
+                        ? 'bg-accent-blue/10 border-accent-blue text-accent-blue'
+                        : 'border-bg-border text-text-secondary hover:border-accent-blue/40'
+                    }`}
+                  >
+                    {label} up
+                    {parsing && active && <Loader2 size={10} className="animate-spin" />}
+                  </button>
+                )
+              })}
             </div>
+
+            {/* Custom angle toggle */}
+            <button
+              onClick={() => setShowCustomDir(v => !v)}
+              className={`w-full py-2 rounded-lg text-xs border transition-colors flex items-center justify-center gap-1.5 ${
+                showCustomDir
+                  ? 'bg-accent-blue/10 border-accent-blue text-accent-blue'
+                  : 'border-bg-border text-text-muted hover:border-accent-blue/40'
+              }`}
+            >
+              {showCustomDir ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              Custom angle
+            </button>
+
+            {showCustomDir && (() => {
+              const dir = sphericalToDir(customPolar, customAzimuth)
+              const parts = dir.slice(7).split(',').map(Number)
+              const applyCustom = (p: number, a: number) => {
+                const d = sphericalToDir(p, a)
+                update({ buildDirection: d })
+              }
+              return (
+                <div className="p-3 rounded-lg border border-bg-border space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Polar — from +Z axis</span>
+                      <span className="font-mono text-accent-cyan">{customPolar}°</span>
+                    </div>
+                    <input type="range" min={0} max={180} step={1} value={customPolar}
+                      className="w-full accent-accent-blue"
+                      onChange={e => { const v = +e.target.value; setCustomPolar(v); applyCustom(v, customAzimuth) }}
+                    />
+                    <div className="flex justify-between text-text-muted">
+                      <span>0° (+Z up)</span><span>90° (horizontal)</span><span>180° (−Z up)</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">Azimuth — around Z</span>
+                      <span className="font-mono text-accent-cyan">{customAzimuth}°</span>
+                    </div>
+                    <input type="range" min={0} max={360} step={1} value={customAzimuth}
+                      className="w-full accent-accent-blue"
+                      onChange={e => { const v = +e.target.value; setCustomAzimuth(v); applyCustom(customPolar, v) }}
+                    />
+                    <div className="flex justify-between text-text-muted">
+                      <span>0° (+X)</span><span>90° (+Y)</span><span>180° (−X)</span><span>270° (−Y)</span>
+                    </div>
+                  </div>
+                  <div className="font-mono text-text-muted bg-bg-secondary rounded px-2 py-1">
+                    build vec [{parts.map(p => p.toFixed(3)).join(', ')}]
+                    {parsing && <Loader2 size={10} className="animate-spin inline ml-2" />}
+                  </div>
+                </div>
+              )
+            })()}
+
             {state.partFileName && (
-              <p className="text-text-muted text-xs mt-1.5 flex items-center gap-1">
+              <p className="text-text-muted text-xs flex items-center gap-1">
                 <Info size={11} /> Changing orientation auto-refreshes geometry, viewer, and support estimate
               </p>
             )}

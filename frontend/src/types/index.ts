@@ -159,7 +159,7 @@ export interface AnalysisState {
   partHeight: number
   partProjectedArea: number
   supportPctOfMass: number
-  buildDirection: 'x' | 'y' | 'z'
+  buildDirection: string
   partFilePath?: string
   partFileName?: string
   geometry?: PartGeometry

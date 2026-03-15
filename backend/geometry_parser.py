@@ -38,6 +38,42 @@ def _load_mesh(file_path: str) -> trimesh.Trimesh:
     raise ValueError(f"Could not extract a mesh from file (got {type(loaded).__name__}).")
 
 
+def _parse_build_vec(build_direction: str):
+    """
+    Parse a build-direction string → (build_vec, primary_axis_or_None).
+
+    Accepted values:
+      'x', 'y', 'z'          — positive axis pointing up (build direction)
+      '-x', '-y', '-z'       — negative axis pointing up
+      'custom:nx,ny,nz'      — arbitrary unit vector (will be normalised)
+
+    Returns (np.ndarray shape (3,), int|None).
+    primary_axis is 0/1/2 for axis-aligned directions (used for fast
+    bounding-box projected-area); None for arbitrary directions.
+    """
+    d = build_direction.strip().lower()
+    presets = {
+        'x':  (np.array([1., 0., 0.]), 0),
+        'y':  (np.array([0., 1., 0.]), 1),
+        'z':  (np.array([0., 0., 1.]), 2),
+        '-x': (np.array([-1., 0., 0.]), 0),
+        '-y': (np.array([0., -1., 0.]), 1),
+        '-z': (np.array([0., 0., -1.]), 2),
+    }
+    if d in presets:
+        return presets[d]
+    if d.startswith('custom:'):
+        try:
+            parts = d[7:].split(',')
+            vec = np.array([float(p) for p in parts[:3]])
+            norm = np.linalg.norm(vec)
+            if norm > 1e-6:
+                return (vec / norm, None)
+        except (ValueError, IndexError):
+            pass
+    return (np.array([0., 0., 1.]), 2)   # default: Z up
+
+
 def parse_stl(file_path: str, build_direction: str = "z", overhang_angle_deg: float = 45.0, fill_density: float = 0.3) -> dict:
     """
     Parse STL/STEP/OBJ and return geometric properties for cost calculation.
@@ -53,28 +89,44 @@ def parse_stl(file_path: str, build_direction: str = "z", overhang_angle_deg: fl
         volume_mm3 = float(abs(mesh.volume))
         volume_cm3 = volume_mm3 / 1000.0
 
-        # ── Bounding box ──────────────────────────────────────────
-        bounds = mesh.bounds          # shape (2, 3) or None
-        extents = mesh.extents        # shape (3,)   or None
+        # ── Bounding box (axis-aligned, for reference) ────────────
+        bounds = mesh.bounds
+        extents = mesh.extents
 
         if bounds is None or extents is None:
-            # Compute manually from vertices
-            verts = np.array(mesh.vertices)
-            mins = verts.min(axis=0)
-            maxs = verts.max(axis=0)
+            verts_raw = np.array(mesh.vertices)
+            mins = verts_raw.min(axis=0)
+            maxs = verts_raw.max(axis=0)
             extents = maxs - mins
             bounds = np.array([mins, maxs])
 
         extents = np.asarray(extents, dtype=float)
         bounds  = np.asarray(bounds,  dtype=float)
 
-        # ── Build direction mapping ───────────────────────────────
-        axis_map = {'x': 0, 'y': 1, 'z': 2}
-        build_axis = axis_map.get(build_direction.lower(), 2)
-        other_axes = [i for i in range(3) if i != build_axis]
+        # ── Build direction → unit vector ─────────────────────────
+        build_vec, primary_axis = _parse_build_vec(build_direction)
 
-        height_cm         = float(extents[build_axis]) / 10.0
-        projected_area_cm2 = float(extents[other_axes[0]] * extents[other_axes[1]]) / 100.0
+        # ── Height along build direction ──────────────────────────
+        verts = np.asarray(mesh.vertices, dtype=float)
+        build_projections = verts @ build_vec          # scalar projection per vertex
+        height_mm = float(build_projections.max() - build_projections.min())
+        height_cm = height_mm / 10.0
+        min_build_proj = float(build_projections.min())  # passed to support estimator
+
+        # ── Projected area perpendicular to build direction ───────
+        if primary_axis is not None:
+            # Fast path: axis-aligned direction — use bounding-box extents
+            other_axes = [i for i in range(3) if i != primary_axis]
+            projected_area_cm2 = float(extents[other_axes[0]] * extents[other_axes[1]]) / 100.0
+        else:
+            # General: project vertices onto the plane perpendicular to build_vec
+            ref = np.array([1., 0., 0.]) if abs(build_vec[0]) < 0.9 else np.array([0., 1., 0.])
+            perp1 = np.cross(build_vec, ref); perp1 /= np.linalg.norm(perp1)
+            perp2 = np.cross(build_vec, perp1)
+            p1 = verts @ perp1;  p2 = verts @ perp2
+            projected_area_cm2 = float(
+                (p1.max() - p1.min()) * (p2.max() - p2.min())
+            ) / 100.0
 
         # ── Surface area ──────────────────────────────────────────
         surface_area_cm2 = float(mesh.area) / 100.0
@@ -84,7 +136,9 @@ def parse_stl(file_path: str, build_direction: str = "z", overhang_angle_deg: fl
         relative_density = volume_cm3 / bbox_vol_cm3 if bbox_vol_cm3 > 0 else 1.0
 
         # ── Support estimation ────────────────────────────────────
-        support_data = estimate_support_volume(mesh, bounds, build_axis, volume_cm3, overhang_angle_deg, fill_density)
+        support_data = estimate_support_volume(
+            mesh, build_vec, min_build_proj, volume_cm3, overhang_angle_deg, fill_density
+        )
 
         # ── Watertight ────────────────────────────────────────────
         try:
@@ -119,8 +173,8 @@ def parse_stl(file_path: str, build_direction: str = "z", overhang_angle_deg: fl
 
 def estimate_support_volume(
     mesh: trimesh.Trimesh,
-    bounds: np.ndarray,
-    build_axis: int = 2,
+    build_vec: np.ndarray,
+    min_build_proj: float,
     part_volume_cm3: float = 0.0,
     overhang_angle_deg: float = 45.0,
     fill_density: float = 0.3,
@@ -140,11 +194,10 @@ def estimate_support_volume(
     (e.g. 0.40 for block, 0.12 for lattice/cone).
     """
     try:
-        build_vec = np.zeros(3)
-        build_vec[build_axis] = 1.0
+        build_vec = np.asarray(build_vec, dtype=float)
 
-        face_normals   = np.asarray(mesh.face_normals,    dtype=float)
-        face_areas     = np.asarray(mesh.area_faces,      dtype=float)
+        face_normals   = np.asarray(mesh.face_normals,     dtype=float)
+        face_areas     = np.asarray(mesh.area_faces,       dtype=float)
         face_centroids = np.asarray(mesh.triangles_center, dtype=float)
 
         threshold    = -math.cos(math.radians(overhang_angle_deg))
@@ -156,23 +209,21 @@ def estimate_support_volume(
 
         overhang_centroids = face_centroids[overhang_mask]
         n_overhangs        = overhang_centroids.shape[0]
-        min_build_mm       = float(bounds[0][build_axis])
 
-        # Default column height: centroid straight down to build plate
-        heights_mm = overhang_centroids[:, build_axis] - min_build_mm
-        heights_mm = np.maximum(heights_mm, 0.0)
+        # Project centroids onto build direction; height above build plate
+        centroid_projs = overhang_centroids @ build_vec          # (n,)
+        heights_mm     = centroid_projs - min_build_proj
+        heights_mm     = np.maximum(heights_mm, 0.0)
 
         # ── Ray-cast downward to find actual floor ─────────────────────────
-        # For meshes within the size limit, cast one ray per overhang face
-        # centroid in the -build_vec direction. The highest intersection below
-        # the centroid (= nearest surface) becomes the support floor.
+        # Cast one ray per overhang centroid in the -build_vec direction.
+        # The highest (nearest) intersection below is the support floor —
+        # part surface if there's geometry below, otherwise the build plate.
         if n_overhangs > 0 and len(mesh.faces) <= 150_000:
             try:
-                eps = 0.05  # mm — offset origin to avoid self-intersection
-                ray_origins      = overhang_centroids.copy()
-                ray_origins[:, build_axis] -= eps
-                ray_dirs         = np.zeros_like(ray_origins)
-                ray_dirs[:, build_axis] = -1.0  # straight down
+                eps       = 0.05                          # mm offset to avoid self-hit
+                ray_dirs  = np.tile(-build_vec, (n_overhangs, 1))
+                ray_origins = overhang_centroids + ray_dirs * eps
 
                 locations, index_ray, _ = mesh.ray.intersects_location(
                     ray_origins=ray_origins,
@@ -181,24 +232,22 @@ def estimate_support_volume(
                 )
 
                 if len(locations) > 0:
-                    hit_z      = locations[:, build_axis]
-                    centroid_z = overhang_centroids[index_ray, build_axis]
-                    # Only keep hits that are genuinely below the centroid
-                    below_mask = hit_z < centroid_z - eps * 2
+                    # Project hit locations onto build direction
+                    hit_proj      = locations @ build_vec
+                    centroid_proj = overhang_centroids[index_ray] @ build_vec
+                    below_mask    = hit_proj < centroid_proj - eps * 2
 
                     if below_mask.any():
-                        valid_floor_z = hit_z[below_mask]
-                        valid_rays    = index_ray[below_mask]
+                        valid_floor = hit_proj[below_mask]
+                        valid_rays  = index_ray[below_mask]
 
-                        # For each ray: highest floor = nearest surface below centroid
-                        best_floor = np.full(n_overhangs, min_build_mm)
-                        np.maximum.at(best_floor, valid_rays, valid_floor_z)
+                        # For each ray: highest projection = nearest surface below
+                        best_floor = np.full(n_overhangs, min_build_proj)
+                        np.maximum.at(best_floor, valid_rays, valid_floor)
 
-                        # Where a part surface was found above the build plate,
-                        # use that shorter column height
-                        improved = best_floor > min_build_mm
+                        improved = best_floor > min_build_proj
                         heights_mm[improved] = (
-                            overhang_centroids[improved, build_axis] - best_floor[improved]
+                            centroid_projs[improved] - best_floor[improved]
                         )
                         heights_mm = np.maximum(heights_mm, 0.0)
             except Exception:
