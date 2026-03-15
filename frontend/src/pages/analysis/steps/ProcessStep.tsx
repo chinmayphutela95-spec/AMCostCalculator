@@ -311,9 +311,10 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
 
       {/* Build Packing */}
       {m && (() => {
-        const partFits = state.partHeight <= 0 || state.partHeight <= m.build_height
-        const suggestedLayers = m.packing_policy === '3D' && state.partHeight > 0
-          ? Math.floor(m.build_height / state.partHeight)
+        const effectiveHeightCm = state.partHeight + (state.elevationMm ?? 0) / 10
+        const partFits = effectiveHeightCm <= 0 || effectiveHeightCm <= m.build_height
+        const suggestedLayers = m.packing_policy === '3D' && effectiveHeightCm > 0
+          ? Math.floor(m.build_height / effectiveHeightCm)
           : 1
         const perLayer = state.partProjectedArea > 0
           ? Math.floor(m.build_area / state.partProjectedArea * m.packing_fraction)
@@ -326,7 +327,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
             <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Build Packing</h3>
             {!partFits && (
               <div className="card border-danger/40 bg-danger/5 mb-3 text-sm text-danger">
-                ⚠ Part height ({(state.partHeight * 10).toFixed(1)} mm) exceeds machine build height ({(m.build_height * 10).toFixed(0)} mm) — the part does not fit in this machine.
+                ⚠ Effective height ({(effectiveHeightCm * 10).toFixed(1)} mm incl. {(state.elevationMm ?? 0).toFixed(0)} mm gap) exceeds machine build height ({(m.build_height * 10).toFixed(0)} mm) — the part does not fit in this machine.
               </div>
             )}
             <div className="card border-bg-border/50">

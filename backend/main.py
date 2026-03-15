@@ -131,6 +131,7 @@ class AnalysisRequest(BaseModel):
     part_mass: float
     part_volume: float
     part_height: float
+    elevation_mm: float = 0.0      # height of part bottom above build plate (mm)
     part_projected_area: float
     support_pct_of_mass: float = 0.15
     # Production
@@ -186,6 +187,7 @@ class CompareRequest(BaseModel):
     part_mass: float
     part_volume: float
     part_height: float
+    elevation_mm: float = 0.0      # height of part bottom above build plate (mm)
     part_projected_area: float
     support_pct_of_mass: float = 0.15
     production_run: int = 100
@@ -213,10 +215,13 @@ def machine_to_cost_inputs(machine: models.Machine, req: AnalysisRequest) -> Cos
     else:
         laser_multiplier = 1
 
+    # Effective height = part geometry height + elevation gap above build plate
+    effective_part_height = req.part_height + getattr(req, 'elevation_mm', 0.0) / 10.0
+
     return CostInputs(
         part_mass=req.part_mass,
         part_volume=req.part_volume,
-        part_height=req.part_height,
+        part_height=effective_part_height,
         part_projected_area=req.part_projected_area,
         support_pct_of_mass=req.support_pct_of_mass,
         production_run=req.production_run,
@@ -486,10 +491,12 @@ def compare_machines(req: CompareRequest, db: Session = Depends(get_db)):
         if not machine:
             continue
 
+        effective_height = req.part_height + req.elevation_mm / 10.0
+
         inputs = CostInputs(
             part_mass=req.part_mass,
             part_volume=req.part_volume,
-            part_height=req.part_height,
+            part_height=effective_height,
             part_projected_area=req.part_projected_area,
             support_pct_of_mass=req.support_pct_of_mass,
             production_run=req.production_run,
