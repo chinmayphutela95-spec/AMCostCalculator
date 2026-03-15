@@ -893,7 +893,7 @@ export function PartStep({ state, update, onNext }: Props) {
               ['Projected Area', `${state.geometry.projected_area_cm2.toFixed(2)} cm²`],
               ['Surface Area', `${state.geometry.surface_area_cm2.toFixed(2)} cm²`],
               ['Fill Density', `${(state.geometry.relative_density * 100).toFixed(1)}%`],
-              ['Est. Support Vol.', `${state.geometry.support_volume_cm3.toFixed(3)} cm³`],
+              ['Est. Support Vol.', `${(state.geometry.support_volume_cm3 + state.partProjectedArea * (state.elevationMm ?? 0) / 10 * fillDensity).toFixed(3)} cm³`],
               [`Support @${overhangAngle}°`, `~${(state.supportPctOfMass * 100).toFixed(1)}% of mass`],
             ].map(([k, v]) => (
               <div key={k} className="p-2 rounded-lg bg-bg-secondary border border-bg-border">
