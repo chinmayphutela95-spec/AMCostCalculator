@@ -128,11 +128,16 @@ def estimate_support_volume(
     """
     Estimate support volume from overhang analysis.
 
-    For each overhang face, a support column is projected straight down to the
-    build plate. The column cross-section equals the face's projected area onto
-    the build plane, and its height equals the face centroid's distance above
-    the build plate. fill_density scales the solid fraction of the support
-    structure (e.g. 0.40 for dense block, 0.12 for lattice/cone).
+    For each overhang face a downward ray is cast from the face centroid to
+    find where the support column lands — on the part surface if there is
+    geometry below (e.g. a bridge between two pillars), or on the build plate
+    if there is nothing. This avoids the overestimation that occurs when
+    overhangs sit above other sections of the same part.
+
+    For meshes with > 150 000 faces the ray-cast is skipped (falls back to
+    build-plate distance) to keep response time reasonable.
+    fill_density scales the solid fraction of the support structure
+    (e.g. 0.40 for block, 0.12 for lattice/cone).
     """
     try:
         build_vec = np.zeros(3)
@@ -149,13 +154,57 @@ def estimate_support_volume(
         overhang_area_mm2 = float(face_areas[overhang_mask].sum())
         overhang_area_cm2 = overhang_area_mm2 / 100.0
 
-        # Height of each overhang face centroid above the build plate (mm)
-        min_build_mm = float(bounds[0][build_axis])
-        heights_mm   = face_centroids[overhang_mask, build_axis] - min_build_mm
-        heights_mm   = np.maximum(heights_mm, 0.0)   # guard against tiny negatives
+        overhang_centroids = face_centroids[overhang_mask]
+        n_overhangs        = overhang_centroids.shape[0]
+        min_build_mm       = float(bounds[0][build_axis])
+
+        # Default column height: centroid straight down to build plate
+        heights_mm = overhang_centroids[:, build_axis] - min_build_mm
+        heights_mm = np.maximum(heights_mm, 0.0)
+
+        # ── Ray-cast downward to find actual floor ─────────────────────────
+        # For meshes within the size limit, cast one ray per overhang face
+        # centroid in the -build_vec direction. The highest intersection below
+        # the centroid (= nearest surface) becomes the support floor.
+        if n_overhangs > 0 and len(mesh.faces) <= 150_000:
+            try:
+                eps = 0.05  # mm — offset origin to avoid self-intersection
+                ray_origins      = overhang_centroids.copy()
+                ray_origins[:, build_axis] -= eps
+                ray_dirs         = np.zeros_like(ray_origins)
+                ray_dirs[:, build_axis] = -1.0  # straight down
+
+                locations, index_ray, _ = mesh.ray.intersects_location(
+                    ray_origins=ray_origins,
+                    ray_directions=ray_dirs,
+                    multiple_hits=True,
+                )
+
+                if len(locations) > 0:
+                    hit_z      = locations[:, build_axis]
+                    centroid_z = overhang_centroids[index_ray, build_axis]
+                    # Only keep hits that are genuinely below the centroid
+                    below_mask = hit_z < centroid_z - eps * 2
+
+                    if below_mask.any():
+                        valid_floor_z = hit_z[below_mask]
+                        valid_rays    = index_ray[below_mask]
+
+                        # For each ray: highest floor = nearest surface below centroid
+                        best_floor = np.full(n_overhangs, min_build_mm)
+                        np.maximum.at(best_floor, valid_rays, valid_floor_z)
+
+                        # Where a part surface was found above the build plate,
+                        # use that shorter column height
+                        improved = best_floor > min_build_mm
+                        heights_mm[improved] = (
+                            overhang_centroids[improved, build_axis] - best_floor[improved]
+                        )
+                        heights_mm = np.maximum(heights_mm, 0.0)
+            except Exception:
+                pass  # keep build-plate heights on any ray-cast failure
 
         # Projected area of each face onto the build plane (mm²)
-        # = face_area × |cos(angle_from_build_axis)| = face_area × |dot|
         projected_areas_mm2 = face_areas[overhang_mask] * np.abs(dot_products[overhang_mask])
 
         # Support column volume = projected_area × height, scaled by fill density
