@@ -218,14 +218,12 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
             f"({inputs.build_height * 10:.0f} mm). The part does not fit in this machine."
         )
 
+    layers = 1  # number of part layers stacked vertically (only >1 for 3D packing)
     if inputs.parts_per_build_override and inputs.parts_per_build_override > 0:
         parts_per_build = inputs.parts_per_build_override
     else:
         if inputs.packing_policy == "3D":
             layers = math.floor(inputs.build_height / inputs.part_height) if inputs.part_height > 0 else 1
-        else:
-            layers = 1
-
         parts_per_layer = (
             inputs.build_area / inputs.part_projected_area * inputs.packing_fraction
             if inputs.part_projected_area > 0
@@ -235,14 +233,18 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
 
     num_builds = math.ceil(inputs.production_run / parts_per_build)
 
+    # Actual Z-extent of powder bed for this job.
+    # For 3D packing the powder bed spans all stacked layers; for 2D (or override) it's one part height.
+    job_height = layers * inputs.part_height
+
     # --- Cost Category 1: Material ---
     total_part_material = inputs.production_run * inputs.part_mass           # kg
     total_support_material = inputs.production_run * support_mass_per_part   # kg
 
-    # Total material in all builds — powder fills build_area × part_height,
-    # not the machine's full build_height (unused chamber above the part is empty).
+    # Total powder deposited across all builds — recoater spreads across the full build area
+    # for every layer up to job_height (unused chamber above is empty).
     total_build_material = (
-        num_builds * inputs.build_area * inputs.part_height * inputs.material_density / 1000
+        num_builds * inputs.build_area * job_height * inputs.material_density / 1000
     )  # kg
 
     recycled_material = (
@@ -280,8 +282,10 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
 
     # Effective build rate scales with number of laser beams engaged
     effective_build_rate = inputs.build_rate * max(1, inputs.laser_multiplier)
+    # Laser scans both part and support material; support_pct_of_mass equals support volume fraction
+    # (same density), so total scanned volume per part = part_volume × (1 + support_pct_of_mass).
     total_scan_time = (
-        inputs.production_run * inputs.part_volume / effective_build_rate
+        inputs.production_run * inputs.part_volume * (1 + inputs.support_pct_of_mass) / effective_build_rate
         if effective_build_rate > 0
         else 0
     )
@@ -290,7 +294,8 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     if inputs.recoating_distance_mm and inputs.recoating_speed_mm_s and inputs.recoating_speed_mm_s > 0:
         recoat_time_per_layer_hr = inputs.recoating_distance_mm / inputs.recoating_speed_mm_s / 3600
         layer_thickness_cm = inputs.layer_thickness_um / 10000 if inputs.layer_thickness_um > 0 else 0.004
-        num_layers = math.ceil(inputs.part_height / layer_thickness_cm) if layer_thickness_cm > 0 else 0
+        # job_height covers all stacked layers (3D packing) so recoating traverses the full job Z extent
+        num_layers = math.ceil(job_height / layer_thickness_cm) if layer_thickness_cm > 0 else 0
         total_recoating_time = num_builds * num_layers * recoat_time_per_layer_hr
     elif inputs.recoating_efficiency < 1.0 and inputs.recoating_efficiency > 0:
         # efficiency fraction: scan_time / total_active_time

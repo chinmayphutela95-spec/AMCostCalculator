@@ -427,10 +427,12 @@ export function PartStep({ state, update, onNext }: Props) {
   const reanalyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Elevation contribution (client-side, no server needed) ────────────────
+  // Elevation pillar is support structure at fillDensity, not solid — multiply by fillDensity
+  // to match the same convention as estimate_support_volume on the server.
   const elevationPct = useCallback((projAreaCm2: number, volCm3: number, elevMm: number) => {
     if (volCm3 <= 0 || projAreaCm2 <= 0) return 0
-    return (projAreaCm2 * (elevMm / 10)) / volCm3 * 100
-  }, [])
+    return (projAreaCm2 * (elevMm / 10) * fillDensity) / volCm3 * 100
+  }, [fillDensity])
 
   // ── Server parse ──────────────────────────────────────────────────────────
   const parseOnServer = useCallback(async (file: File, direction: string, angle = 45, density = 0.3) => {
