@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Cpu, Check, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Cpu, Check, AlertCircle, Ban } from 'lucide-react'
 import { machinesApi } from '../../../lib/api'
 import { formatCurrency } from '../../../lib/utils'
 import type { AnalysisState, Machine } from '../../../types'
@@ -40,6 +40,19 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
     })
   }
 
+  // Effective part height = part height + elevation gap (both in cm)
+  const effectiveHeightCm = (state.partHeight ?? 0) + (state.elevationMm ?? 0) / 10
+  const projectedAreaCm2 = state.partProjectedArea ?? 0
+
+  const machineDisabledReason = (m: Machine): string | null => {
+    const tooTall = effectiveHeightCm > 0 && m.build_height > 0 && effectiveHeightCm > m.build_height
+    const tooWide = projectedAreaCm2 > 0 && m.build_area > 0 && projectedAreaCm2 > m.build_area
+    if (tooTall && tooWide) return `Part + gap (${(effectiveHeightCm * 10).toFixed(0)} mm tall, ${projectedAreaCm2.toFixed(1)} cm² footprint) exceeds machine limits`
+    if (tooTall) return `Part + gap height ${(effectiveHeightCm * 10).toFixed(0)} mm exceeds machine build height ${(m.build_height * 10).toFixed(0)} mm`
+    if (tooWide) return `Part footprint ${projectedAreaCm2.toFixed(1)} cm² exceeds machine build area ${m.build_area.toFixed(1)} cm²`
+    return null
+  }
+
   const grouped = machines.reduce((acc, m) => {
     const key = m.manufacturer || 'Other'
     if (!acc[key]) acc[key] = []
@@ -70,23 +83,33 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                   const isCompare = compare.has(m.id)
                   const buildVol = ((m.build_area * m.build_height) / 1000).toFixed(1)
                   const hasWarning = m.notes?.includes('⚠️')
+                  const disabledReason = machineDisabledReason(m)
+                  const isDisabled = !!disabledReason
 
                   return (
                     <div
                       key={m.id}
-                      onClick={() => select(m)}
-                      className={`card cursor-pointer transition-all hover:border-accent-blue/50 relative ${
-                        isSelected ? 'border-accent-blue bg-accent-blue/5 glow-blue' : ''
+                      onClick={() => !isDisabled && select(m)}
+                      title={disabledReason ?? undefined}
+                      className={`card relative transition-all ${
+                        isDisabled
+                          ? 'opacity-40 cursor-not-allowed bg-bg-secondary'
+                          : `cursor-pointer hover:border-accent-blue/50 ${isSelected ? 'border-accent-blue bg-accent-blue/5 glow-blue' : ''}`
                       }`}
                     >
-                      {isSelected && (
+                      {isSelected && !isDisabled && (
                         <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-accent-blue flex items-center justify-center">
                           <Check size={12} className="text-white" />
                         </div>
                       )}
+                      {isDisabled && (
+                        <div className="absolute top-3 right-3">
+                          <Ban size={14} className="text-text-muted" />
+                        </div>
+                      )}
                       <div className="flex items-start gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-accent-blue/20' : 'bg-bg-secondary'}`}>
-                          <Cpu size={16} className={isSelected ? 'text-accent-blue' : 'text-text-muted'} />
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isSelected && !isDisabled ? 'bg-accent-blue/20' : 'bg-bg-secondary'}`}>
+                          <Cpu size={16} className={isSelected && !isDisabled ? 'text-accent-blue' : 'text-text-muted'} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -94,6 +117,10 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                             {hasWarning && <AlertCircle size={13} className="text-warning shrink-0" />}
                             {m.is_custom && <span className="badge bg-accent-purple/20 text-accent-purple text-xs">Custom</span>}
                           </div>
+
+                          {isDisabled && (
+                            <p className="text-xs text-red-400 mt-1 leading-tight">{disabledReason}</p>
+                          )}
 
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
                             <div>
@@ -124,14 +151,16 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                             </div>
                           </div>
 
-                          <button
-                            onClick={(e) => toggleCompare(m.id, e)}
-                            className={`mt-2 text-xs px-2.5 py-0.5 rounded border transition-colors ${
-                              isCompare ? 'border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10' : 'border-bg-border text-text-muted hover:border-accent-cyan/50'
-                            }`}
-                          >
-                            {isCompare ? '✓ In comparison' : 'Add to compare'}
-                          </button>
+                          {!isDisabled && (
+                            <button
+                              onClick={(e) => toggleCompare(m.id, e)}
+                              className={`mt-2 text-xs px-2.5 py-0.5 rounded border transition-colors ${
+                                isCompare ? 'border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10' : 'border-bg-border text-text-muted hover:border-accent-cyan/50'
+                              }`}
+                            >
+                              {isCompare ? '✓ In comparison' : 'Add to compare'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
