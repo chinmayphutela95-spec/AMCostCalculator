@@ -38,7 +38,7 @@ def _load_mesh(file_path: str) -> trimesh.Trimesh:
     raise ValueError(f"Could not extract a mesh from file (got {type(loaded).__name__}).")
 
 
-def parse_stl(file_path: str, build_direction: str = "z") -> dict:
+def parse_stl(file_path: str, build_direction: str = "z", overhang_angle_deg: float = 45.0, fill_density: float = 0.3) -> dict:
     """
     Parse STL/STEP/OBJ and return geometric properties for cost calculation.
     All linear dimensions assumed in mm (standard STL unit).
@@ -84,7 +84,7 @@ def parse_stl(file_path: str, build_direction: str = "z") -> dict:
         relative_density = volume_cm3 / bbox_vol_cm3 if bbox_vol_cm3 > 0 else 1.0
 
         # ── Support estimation ────────────────────────────────────
-        support_data = estimate_support_volume(mesh, bounds, build_axis, volume_cm3)
+        support_data = estimate_support_volume(mesh, bounds, build_axis, volume_cm3, overhang_angle_deg, fill_density)
 
         # ── Watertight ────────────────────────────────────────────
         try:
@@ -123,14 +123,24 @@ def estimate_support_volume(
     build_axis: int = 2,
     part_volume_cm3: float = 0.0,
     overhang_angle_deg: float = 45.0,
+    fill_density: float = 0.3,
 ) -> dict:
-    """Estimate support volume from overhang analysis (pure numpy, no networkx)."""
+    """
+    Estimate support volume from overhang analysis.
+
+    For each overhang face, a support column is projected straight down to the
+    build plate. The column cross-section equals the face's projected area onto
+    the build plane, and its height equals the face centroid's distance above
+    the build plate. fill_density scales the solid fraction of the support
+    structure (e.g. 0.40 for dense block, 0.12 for lattice/cone).
+    """
     try:
         build_vec = np.zeros(3)
         build_vec[build_axis] = 1.0
 
-        face_normals = np.asarray(mesh.face_normals, dtype=float)
-        face_areas   = np.asarray(mesh.area_faces,   dtype=float)
+        face_normals   = np.asarray(mesh.face_normals,    dtype=float)
+        face_areas     = np.asarray(mesh.area_faces,      dtype=float)
+        face_centroids = np.asarray(mesh.triangles_center, dtype=float)
 
         threshold    = -math.cos(math.radians(overhang_angle_deg))
         dot_products = face_normals @ build_vec
@@ -139,10 +149,18 @@ def estimate_support_volume(
         overhang_area_mm2 = float(face_areas[overhang_mask].sum())
         overhang_area_cm2 = overhang_area_mm2 / 100.0
 
-        build_extent_mm   = float(bounds[1][build_axis] - bounds[0][build_axis])
-        avg_height_mm     = build_extent_mm * 0.2
-        support_vol_mm3   = overhang_area_mm2 * avg_height_mm * 0.3
-        support_vol_cm3   = support_vol_mm3 / 1000.0
+        # Height of each overhang face centroid above the build plate (mm)
+        min_build_mm = float(bounds[0][build_axis])
+        heights_mm   = face_centroids[overhang_mask, build_axis] - min_build_mm
+        heights_mm   = np.maximum(heights_mm, 0.0)   # guard against tiny negatives
+
+        # Projected area of each face onto the build plane (mm²)
+        # = face_area × |cos(angle_from_build_axis)| = face_area × |dot|
+        projected_areas_mm2 = face_areas[overhang_mask] * np.abs(dot_products[overhang_mask])
+
+        # Support column volume = projected_area × height, scaled by fill density
+        support_vol_mm3 = float((projected_areas_mm2 * heights_mm).sum()) * fill_density
+        support_vol_cm3 = support_vol_mm3 / 1000.0
 
         vol = part_volume_cm3 if part_volume_cm3 > 0 else max(float(abs(mesh.volume)) / 1000.0, 1e-9)
         support_pct = min(support_vol_cm3 / vol * 100, 100.0)

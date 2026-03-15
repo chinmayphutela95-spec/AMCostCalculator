@@ -185,6 +185,84 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
   )
 }
 
+/**
+ * Renders semi-transparent support columns below each overhang face.
+ * Each column stretches from the face centroid straight down to the build plate.
+ * Uses InstancedMesh so even 10k+ columns render in a single draw call.
+ * The viewer always pre-rotates to Y-up, so buildAxis is always 1 here.
+ */
+function SupportColumns({ geometry, overhangAngle, elevationMm }: {
+  geometry: THREE.BufferGeometry
+  overhangAngle: number
+  elevationMm: number
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null!)
+
+  const columns = useMemo(() => {
+    const normals = geometry.attributes.normal as THREE.BufferAttribute
+    const pos    = geometry.attributes.position as THREE.BufferAttribute
+    const count  = pos.count
+    const threshold = -Math.sin((overhangAngle * Math.PI) / 180)
+
+    geometry.computeBoundingBox()
+    const box = geometry.boundingBox!
+    const minY       = box.min.y
+    const buildPlateY = minY - elevationMm
+    const eps         = (box.max.y - minY) * 0.005
+
+    const result: { cx: number; midY: number; cz: number; height: number; side: number }[] = []
+
+    for (let i = 0; i < count; i += 3) {
+      // dot product with build vec [0,1,0] — just the Y component of the normal
+      const dot = normals.getY(i)
+      let isOverhang = dot < threshold
+      if (isOverhang && elevationMm === 0) {
+        const y0 = pos.getY(i), y1 = pos.getY(i + 1), y2 = pos.getY(i + 2)
+        if (Math.min(y0, y1, y2) <= minY + eps) isOverhang = false
+      }
+      if (!isOverhang) continue
+
+      const cx = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3
+      const cy = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3
+      const cz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3
+      const height = cy - buildPlateY
+      if (height < 0.5) continue
+
+      // Face area via cross product; projected area = face_area × |dot|
+      const e1x = pos.getX(i+1) - pos.getX(i), e1y = pos.getY(i+1) - pos.getY(i), e1z = pos.getZ(i+1) - pos.getZ(i)
+      const e2x = pos.getX(i+2) - pos.getX(i), e2y = pos.getY(i+2) - pos.getY(i), e2z = pos.getZ(i+2) - pos.getZ(i)
+      const faceArea = Math.sqrt(
+        (e1y*e2z - e1z*e2y) ** 2 + (e1z*e2x - e1x*e2z) ** 2 + (e1x*e2y - e1y*e2x) ** 2
+      ) * 0.5
+      const side = Math.sqrt(Math.max(faceArea * Math.abs(dot), 0.5))
+
+      result.push({ cx, midY: buildPlateY + height / 2, cz, height, side })
+    }
+    return result
+  }, [geometry, overhangAngle, elevationMm])
+
+  useEffect(() => {
+    if (!meshRef.current || columns.length === 0) return
+    const dummy = new THREE.Object3D()
+    columns.forEach(({ cx, midY, cz, height, side }, idx) => {
+      dummy.position.set(cx, midY, cz)
+      dummy.scale.set(side, height, side)
+      dummy.updateMatrix()
+      meshRef.current.setMatrixAt(idx, dummy.matrix)
+    })
+    meshRef.current.instanceMatrix.needsUpdate = true
+  }, [columns])
+
+  if (columns.length === 0) return null
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, columns.length]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color="#f97316" opacity={0.22} transparent depthWrite={false} side={THREE.DoubleSide} />
+    </instancedMesh>
+  )
+}
+
 /** Positions and orients camera based on mesh + build axis + elevation; resets on change */
 function AutoCamera({ geometry, buildAxis, elevationMm }: { geometry: THREE.BufferGeometry; buildAxis: number; elevationMm: number }) {
   const { camera, controls } = useThree()
@@ -222,10 +300,11 @@ function AutoCamera({ geometry, buildAxis, elevationMm }: { geometry: THREE.Buff
   return null
 }
 
-function StlScene({ geometry, overhangAngle, elevationMm }: {
+function StlScene({ geometry, overhangAngle, elevationMm, showSupportVolume }: {
   geometry: THREE.BufferGeometry
   overhangAngle: number
   elevationMm: number
+  showSupportVolume: boolean
 }) {
   const { platformY, gridSize } = useMemo(() => {
     geometry.computeBoundingBox()
@@ -245,6 +324,9 @@ function StlScene({ geometry, overhangAngle, elevationMm }: {
       <directionalLight position={[-10, -5, -15]} intensity={0.25} />
       <AutoCamera geometry={geometry} buildAxis={1} elevationMm={elevationMm} />
       <OverhangMesh geometry={geometry} buildAxis={1} overhangAngle={overhangAngle} elevationMm={elevationMm} />
+      {showSupportVolume && (
+        <SupportColumns geometry={geometry} overhangAngle={overhangAngle} elevationMm={elevationMm} />
+      )}
       <BoundingBoxWire geometry={geometry} />
       <BuildPlatform geometry={geometry} elevationMm={elevationMm} />
       <Grid
@@ -260,47 +342,6 @@ function StlScene({ geometry, overhangAngle, elevationMm }: {
   )
 }
 
-// ─── Client-side overhang area fraction (0–100%) ─────────────────────────────
-
-function calcOverhangAreaPct(
-  geo: THREE.BufferGeometry,
-  buildAxis: number,
-  overhangAngle: number,
-  elevationMm = 0,
-): number {
-  const normals = geo.attributes.normal as THREE.BufferAttribute
-  const pos = geo.attributes.position as THREE.BufferAttribute
-  const count = pos.count
-  const buildVec = [0, 0, 0]
-  buildVec[buildAxis] = 1.0
-  // Angle is measured from horizontal; face needs support when its normal · up < -sin(angle)
-  const threshold = -Math.sin((overhangAngle * Math.PI) / 180)
-
-  geo.computeBoundingBox()
-  const minY = geo.boundingBox!.min.y
-  const eps = (geo.boundingBox!.max.y - minY) * 0.005
-
-  let overhangArea = 0, totalArea = 0
-  const v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3()
-
-  for (let i = 0; i < count; i += 3) {
-    v0.fromBufferAttribute(pos, i)
-    v1.fromBufferAttribute(pos, i + 1)
-    v2.fromBufferAttribute(pos, i + 2)
-    const area = v1.clone().sub(v0).cross(v2.clone().sub(v0)).length() * 0.5
-
-    const dot = normals.getX(i) * buildVec[0] + normals.getY(i) * buildVec[1] + normals.getZ(i) * buildVec[2]
-    totalArea += area
-    if (dot < threshold) {
-      // Exclude the plate-contact face when elevation = 0 (it's supported by the plate)
-      if (elevationMm === 0 && Math.min(v0.y, v1.y, v2.y) <= minY + eps) continue
-      overhangArea += area
-    }
-  }
-
-  return totalArea === 0 ? 0 : (overhangArea / totalArea) * 100
-}
-
 // ─── Main PartStep ────────────────────────────────────────────────────────────
 
 interface Props {
@@ -311,26 +352,47 @@ interface Props {
 
 const AXIS_MAP = { x: 0, y: 1, z: 2 } as const
 
+const SUPPORT_PRESETS = [
+  { label: 'Block',       density: 0.40, tip: 'Perforated block — dense, good for critical surfaces' },
+  { label: 'Serrated',    density: 0.32, tip: 'Serrated/teeth block — easier removal than solid block' },
+  { label: 'Contour',     density: 0.27, tip: 'Contour-following — good for curved overhangs' },
+  { label: 'Gusset/Fin',  density: 0.15, tip: 'Thin fins/walls — minimal material, moderate removal effort' },
+  { label: 'Lattice',     density: 0.12, tip: 'Lattice or cone — least material, easiest removal' },
+  { label: 'Custom',      density: -1,   tip: 'Enter your own fill density' },
+] as const
+
 export function PartStep({ state, update, onNext }: Props) {
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [threeGeo, setThreeGeo] = useState<THREE.BufferGeometry | null>(null)
   const [overhangAngle, setOverhangAngle] = useState(45)
   const [showSupportInfo, setShowSupportInfo] = useState(false)
+  const [fillDensity, setFillDensity] = useState(0.3)
+  const [selectedPreset, setSelectedPreset] = useState('Block')
+  const [customDensity, setCustomDensity] = useState('30')
+  const [showSupportVolume, setShowSupportVolume] = useState(true)
 
   const fileRef = useRef<File | null>(null)
   const loaderRef = useRef(new STLLoader())
-  // Server's estimated_support_pct (0–100) — source of truth for initial value
+  // Server's estimated_support_pct (0–100, overhang only — elevation added on top)
   const serverPctRef = useRef(0)
+  const reanalyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Elevation contribution (client-side, no server needed) ────────────────
+  const elevationPct = useCallback((projAreaCm2: number, volCm3: number, elevMm: number) => {
+    if (volCm3 <= 0 || projAreaCm2 <= 0) return 0
+    return (projAreaCm2 * (elevMm / 10)) / volCm3 * 100
+  }, [])
 
   // ── Server parse ──────────────────────────────────────────────────────────
-  const parseOnServer = useCallback(async (file: File, direction: string) => {
+  const parseOnServer = useCallback(async (file: File, direction: string, angle = 45, density = 0.3) => {
     setParsing(true)
     setParseError('')
     try {
-      const result = await geometryApi.parse(file, direction)
+      const result = await geometryApi.parse(file, direction, angle, density)
       if (!result.success) { setParseError(result.error || 'Failed to parse'); return }
       serverPctRef.current = result.estimated_support_pct
+      const elevPct = elevationPct(result.projected_area_cm2, result.volume_cm3, 0)
       update({
         geometry: result,
         partFileName: result.file_name ?? file.name,
@@ -338,15 +400,36 @@ export function PartStep({ state, update, onNext }: Props) {
         partVolume: result.volume_cm3,
         partHeight: result.height_cm,
         partProjectedArea: result.projected_area_cm2,
-        // Use server value directly — slider will scale from this baseline
-        supportPctOfMass: Math.min(result.estimated_support_pct / 100, 0.5),
+        supportPctOfMass: Math.min((result.estimated_support_pct + elevPct) / 100, 0.80),
       })
     } catch (e: any) {
       setParseError(e.message || 'Parse error')
     } finally {
       setParsing(false)
     }
-  }, [update])
+  }, [update, elevationPct])
+
+  // ── Reanalyze with new angle/fill density (uses already-uploaded file) ────
+  const reanalyzeOnServer = useCallback(async (angle: number, density: number, elevMm: number) => {
+    if (!state.partFilePath || state.partVolume <= 0) return
+    setParsing(true)
+    try {
+      const result = await geometryApi.reanalyze(state.partFilePath, state.buildDirection, angle, density)
+      if (!result.success) return
+      serverPctRef.current = result.estimated_support_pct
+      const elevPct = elevationPct(state.partProjectedArea, state.partVolume, elevMm)
+      update({ supportPctOfMass: Math.min((result.estimated_support_pct + elevPct) / 100, 0.80) })
+    } catch {
+      // keep existing value on failure
+    } finally {
+      setParsing(false)
+    }
+  }, [state.partFilePath, state.buildDirection, state.partVolume, state.partProjectedArea, update, elevationPct])
+
+  const debouncedReanalyze = useCallback((angle: number, density: number, elevMm: number) => {
+    if (reanalyzeTimerRef.current) clearTimeout(reanalyzeTimerRef.current)
+    reanalyzeTimerRef.current = setTimeout(() => reanalyzeOnServer(angle, density, elevMm), 400)
+  }, [reanalyzeOnServer])
 
   // ── Load geometry into Three.js viewer ────────────────────────────────────
   // Pre-rotate so the chosen build axis always points up (screen Y).
@@ -390,34 +473,26 @@ export function PartStep({ state, update, onNext }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.buildDirection])
 
-  // ── Shared support recalc: overhang (angle-scaled) + elevation pillars ──
-  // Geometry is pre-rotated so overhang always uses axis=1 (Y).
-  // Elevation contribution is computed even without a loaded STL.
-  const recomputeSupport = useCallback((angle: number, elevMm: number) => {
-    if (state.partVolume <= 0 || state.partProjectedArea <= 0) return
-    let scaledOverhangPct = serverPctRef.current
-    if (threeGeo) {
-      const base = calcOverhangAreaPct(threeGeo, 1, 45, elevMm)
-      if (base > 0) {
-        const clientAtAngle = calcOverhangAreaPct(threeGeo, 1, angle, elevMm)
-        scaledOverhangPct = serverPctRef.current * (clientAtAngle / base)
-      }
-    }
-    // Elevation pillars: projected_area (cm²) × elevation (cm) / part_volume (cm³)
-    const elevSupportPct = (state.partProjectedArea * (elevMm / 10)) / state.partVolume * 100
-    update({ supportPctOfMass: Math.min((scaledOverhangPct + elevSupportPct) / 100, 0.80) })
-  }, [threeGeo, state.partVolume, state.partProjectedArea, update])
-
   const handleAngleChange = useCallback((angle: number) => {
     setOverhangAngle(angle)
-    recomputeSupport(angle, state.elevationMm ?? 0)
-  }, [recomputeSupport, state.elevationMm])
+    debouncedReanalyze(angle, fillDensity, state.elevationMm ?? 0)
+  }, [debouncedReanalyze, fillDensity, state.elevationMm])
+
+  const handleFillDensityChange = useCallback((density: number, preset: string) => {
+    setFillDensity(density)
+    setSelectedPreset(preset)
+    debouncedReanalyze(overhangAngle, density, state.elevationMm ?? 0)
+  }, [debouncedReanalyze, overhangAngle, state.elevationMm])
 
   const handleElevationChange = useCallback((elevMm: number) => {
     const clamped = Math.max(0, elevMm)
     update({ elevationMm: clamped })
-    recomputeSupport(overhangAngle, clamped)
-  }, [recomputeSupport, overhangAngle, update])
+    // Elevation is client-side only — no overhang recalc needed
+    if (state.partVolume > 0 && state.partProjectedArea > 0) {
+      const elevPct = elevationPct(state.partProjectedArea, state.partVolume, clamped)
+      update({ supportPctOfMass: Math.min((serverPctRef.current + elevPct) / 100, 0.80) })
+    }
+  }, [state.partVolume, state.partProjectedArea, elevationPct, update])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -556,34 +631,79 @@ export function PartStep({ state, update, onNext }: Props) {
                 <span>75° (lenient)</span>
               </div>
 
+              {/* Support structure fill density */}
+              <div className="space-y-2 pt-1">
+                <label className="label mb-0 text-xs">Support Structure Type</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {SUPPORT_PRESETS.map(p => (
+                    <button
+                      key={p.label}
+                      title={p.tip}
+                      onClick={() => {
+                        if (p.label === 'Custom') {
+                          setSelectedPreset('Custom')
+                        } else {
+                          handleFillDensityChange(p.density, p.label)
+                        }
+                      }}
+                      className={`py-1.5 px-2 rounded-lg text-xs border transition-colors ${
+                        selectedPreset === p.label
+                          ? 'bg-accent-blue/10 border-accent-blue text-accent-blue'
+                          : 'border-bg-border text-text-secondary hover:border-accent-blue/40'
+                      }`}
+                    >
+                      {p.label}
+                      {p.density > 0 && (
+                        <span className="ml-1 text-text-muted font-mono">
+                          {Math.round(p.density * 100)}%
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {selectedPreset === 'Custom' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min={5} max={100} step={1}
+                      className="w-20 input-field py-1 text-sm font-mono text-center"
+                      value={customDensity}
+                      onChange={e => {
+                        const raw = e.target.value
+                        setCustomDensity(raw)
+                        const v = Math.min(100, Math.max(5, +raw))
+                        if (!isNaN(v)) handleFillDensityChange(v / 100, 'Custom')
+                      }}
+                    />
+                    <span className="text-text-secondary text-sm">% fill density</span>
+                  </div>
+                )}
+              </div>
+
               {/* Info panel */}
               {showSupportInfo && (
                 <div className="p-3 rounded-lg bg-bg-primary border border-bg-border text-xs text-text-muted leading-relaxed space-y-1.5">
                   <p className="font-semibold text-text-secondary">How support % is estimated</p>
                   <p>
-                    Every face of the mesh is tested: if its normal vector points
-                    more than <span className="text-accent-cyan">(90° − threshold)</span> away from the build axis,
-                    the face is flagged as an overhang that cannot self-support during printing.
+                    Every face is tested against the overhang threshold. Flagged faces project
+                    a support column straight down to the build plate — the column's cross-section
+                    equals the face's projected area and its height equals the face centroid's
+                    distance above the plate.
                   </p>
                   <p>
-                    The server computes an <em>estimated support volume</em> by projecting overhang areas
-                    downward (avg. 20% of build height × 0.3 packing density) and expresses it as a
-                    percentage of total part volume.
-                  </p>
-                  <p>
-                    Adjusting the threshold slider scales this estimate proportionally — a stricter
-                    angle flags more faces, a lenient one flags fewer. Standard LPBF machines
-                    typically require support beyond 45° from vertical.
+                    Support volume = Σ(projected_area × height) × fill density. The
+                    <span className="text-accent-cyan"> Support Structure Type</span> sets the fill
+                    density (e.g. 40% for block, 12% for lattice). A stricter angle flags more
+                    faces; a lenient one flags fewer.
                   </p>
                   <p className="text-text-muted/60 text-xs">
-                    The % shown is an approximation. Complex internal geometries may differ.
-                    Drag the "Support Material" slider below to override manually.
+                    This is a geometric estimate — complex internal geometries or nested overhangs
+                    may differ. Drag the "Support Material" slider below to override manually.
                   </p>
                 </div>
               )}
 
-              {/* Legend */}
-              <div className="flex items-center gap-4 text-xs pt-1 border-t border-bg-border">
+              {/* Legend + support volume toggle */}
+              <div className="flex items-center gap-4 text-xs pt-1 border-t border-bg-border flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm bg-orange-500 inline-block" />
                   <span className="text-text-muted">Needs support</span>
@@ -594,8 +714,15 @@ export function PartStep({ state, update, onNext }: Props) {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm border border-accent-cyan inline-block" />
-                  <span className="text-text-muted">Bounding box (with dims)</span>
+                  <span className="text-text-muted">Bounding box</span>
                 </span>
+                <button
+                  onClick={() => setShowSupportVolume(v => !v)}
+                  className={`flex items-center gap-1.5 ml-auto transition-colors ${showSupportVolume ? 'text-orange-400' : 'text-text-muted'}`}
+                >
+                  <span className="w-3 h-3 rounded-sm inline-block" style={{ background: showSupportVolume ? 'rgba(249,115,22,0.45)' : 'transparent', border: '1px solid #f97316' }} />
+                  <span>{showSupportVolume ? 'Hide' : 'Show'} support volume</span>
+                </button>
               </div>
             </div>
           )}
@@ -614,6 +741,7 @@ export function PartStep({ state, update, onNext }: Props) {
                     geometry={threeGeo}
                     overhangAngle={overhangAngle}
                     elevationMm={state.elevationMm ?? 0}
+                    showSupportVolume={showSupportVolume}
                   />
                 </Suspense>
               </Canvas>

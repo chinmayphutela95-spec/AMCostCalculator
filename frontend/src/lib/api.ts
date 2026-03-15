@@ -19,13 +19,23 @@ export const materialsApi = {
 }
 
 export const geometryApi = {
-  parse: (file: File, buildDirection: string) => {
+  parse: (file: File, buildDirection: string, overhangAngle = 45, fillDensity = 0.3) => {
     const form = new FormData()
     form.append('file', file)
     form.append('build_direction', buildDirection)
+    form.append('overhang_angle', String(overhangAngle))
+    form.append('fill_density', String(fillDensity))
     return api.post('/geometry/parse', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
+  },
+  reanalyze: (filePath: string, buildDirection: string, overhangAngle: number, fillDensity: number) => {
+    const form = new FormData()
+    form.append('file_path', filePath)
+    form.append('build_direction', buildDirection)
+    form.append('overhang_angle', String(overhangAngle))
+    form.append('fill_density', String(fillDensity))
+    return api.post('/geometry/reanalyze', form).then(r => r.data)
   },
 }
 

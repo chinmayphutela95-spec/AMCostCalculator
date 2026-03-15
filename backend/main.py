@@ -401,7 +401,9 @@ def delete_material(material_id: int, db: Session = Depends(get_db)):
 @app.post("/api/geometry/parse")
 async def parse_geometry(
     file: UploadFile = File(...),
-    build_direction: str = Form(default="z")
+    build_direction: str = Form(default="z"),
+    overhang_angle: float = Form(default=45.0),
+    fill_density: float = Form(default=0.3),
 ):
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in ['.stl', '.step', '.stp', '.obj']:
@@ -417,13 +419,24 @@ async def parse_geometry(
         content = await file.read()
         f.write(content)
 
-    # Parse geometry
-    result = parse_stl(save_path, build_direction)
+    result = parse_stl(save_path, build_direction, overhang_angle, fill_density)
     result["file_id"] = file_id
     result["file_name"] = file.filename
     result["file_path"] = save_path
 
     return result
+
+
+@app.post("/api/geometry/reanalyze")
+async def reanalyze_geometry(
+    file_path: str = Form(...),
+    build_direction: str = Form(default="z"),
+    overhang_angle: float = Form(default=45.0),
+    fill_density: float = Form(default=0.3),
+):
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found. Please re-upload the STL.")
+    return parse_stl(file_path, build_direction, overhang_angle, fill_density)
 
 
 # ============================================================
