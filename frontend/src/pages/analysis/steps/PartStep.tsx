@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, File as FileIcon, RotateCcw, Info, ChevronRight, Loader2, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, File as FileIcon, RotateCcw, Info, ChevronRight, Loader2, HelpCircle, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Grid, Html } from '@react-three/drei'
 // @ts-ignore
@@ -420,11 +420,14 @@ export function PartStep({ state, update, onNext }: Props) {
   const [customPolar, setCustomPolar] = useState(0)
   const [customAzimuth, setCustomAzimuth] = useState(0)
 
+  const [analysisReady, setAnalysisReady] = useState(!!state.geometry)
+  const [settingsDirty, setSettingsDirty] = useState(false)
+  const analysisReadyRef = useRef(!!state.geometry) // stable ref for use inside effects/callbacks
+
   const fileRef = useRef<File | null>(null)
   const loaderRef = useRef(new STLLoader())
   // Server's estimated_support_pct (0–100, overhang only — elevation added on top)
   const serverPctRef = useRef(0)
-  const reanalyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Elevation contribution (client-side, no server needed) ────────────────
   // Elevation pillar is support structure at fillDensity, not solid — multiply by fillDensity
@@ -452,34 +455,15 @@ export function PartStep({ state, update, onNext }: Props) {
         partProjectedArea: result.projected_area_cm2,
         supportPctOfMass: Math.min((result.estimated_support_pct + elevPct) / 100, 0.80),
       })
+      setAnalysisReady(true)
+      analysisReadyRef.current = true
+      setSettingsDirty(false)
     } catch (e: any) {
       setParseError(e.message || 'Parse error')
     } finally {
       setParsing(false)
     }
   }, [update, elevationPct])
-
-  // ── Reanalyze with new angle/fill density (uses already-uploaded file) ────
-  const reanalyzeOnServer = useCallback(async (angle: number, density: number, elevMm: number) => {
-    if (!state.partFilePath || state.partVolume <= 0) return
-    setParsing(true)
-    try {
-      const result = await geometryApi.reanalyze(state.partFilePath, state.buildDirection, angle, density)
-      if (!result.success) return
-      serverPctRef.current = result.estimated_support_pct
-      const elevPct = elevationPct(state.partProjectedArea, state.partVolume, elevMm)
-      update({ supportPctOfMass: Math.min((result.estimated_support_pct + elevPct) / 100, 0.80) })
-    } catch {
-      // keep existing value on failure
-    } finally {
-      setParsing(false)
-    }
-  }, [state.partFilePath, state.buildDirection, state.partVolume, state.partProjectedArea, update, elevationPct])
-
-  const debouncedReanalyze = useCallback((angle: number, density: number, elevMm: number) => {
-    if (reanalyzeTimerRef.current) clearTimeout(reanalyzeTimerRef.current)
-    reanalyzeTimerRef.current = setTimeout(() => reanalyzeOnServer(angle, density, elevMm), 400)
-  }, [reanalyzeOnServer])
 
   // ── Load geometry into Three.js viewer ────────────────────────────────────
   // Pre-rotate so the chosen build axis always points up (screen Y).
@@ -498,44 +482,55 @@ export function PartStep({ state, update, onNext }: Props) {
     })
   }, [])
 
-  // ── On file drop ──────────────────────────────────────────────────────────
-  const onDrop = useCallback(async (files: File[]) => {
+  // ── On file drop — load viewer only; user clicks Analyze to run server parse ─
+  const onDrop = useCallback((files: File[]) => {
     const file = files[0]
     if (!file) return
     fileRef.current = file
     loadViewer(file, state.buildDirection)
-    await parseOnServer(file, state.buildDirection)
-  }, [state.buildDirection, parseOnServer, loadViewer])
+    setAnalysisReady(false)
+    analysisReadyRef.current = false
+    setSettingsDirty(false)
+    update({ geometry: undefined, partVolume: 0, partHeight: 0, partProjectedArea: 0, supportPctOfMass: 0.10 })
+  }, [state.buildDirection, loadViewer, update])
 
-  // ── Auto re-parse + re-orient viewer when build direction changes ──────────
+  // ── Re-orient viewer when build direction changes; mark dirty if already analyzed ──
   useEffect(() => {
     if (fileRef.current && state.partFileName) {
-      parseOnServer(fileRef.current, state.buildDirection)
       loadViewer(fileRef.current, state.buildDirection)
+      if (analysisReadyRef.current) setSettingsDirty(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.buildDirection])
 
   const handleAngleChange = useCallback((angle: number) => {
     setOverhangAngle(angle)
-    debouncedReanalyze(angle, fillDensity, state.elevationMm ?? 0)
-  }, [debouncedReanalyze, fillDensity, state.elevationMm])
+    if (analysisReadyRef.current) setSettingsDirty(true)
+  }, [])
 
   const handleFillDensityChange = useCallback((density: number, preset: string) => {
     setFillDensity(density)
     setSelectedPreset(preset)
-    debouncedReanalyze(overhangAngle, density, state.elevationMm ?? 0)
-  }, [debouncedReanalyze, overhangAngle, state.elevationMm])
+    if (analysisReadyRef.current) setSettingsDirty(true)
+  }, [])
 
   const handleElevationChange = useCallback((elevMm: number) => {
     const clamped = Math.max(0, elevMm)
     update({ elevationMm: clamped })
-    // Elevation is client-side only — no overhang recalc needed
-    if (state.partVolume > 0 && state.partProjectedArea > 0) {
-      const elevPct = elevationPct(state.partProjectedArea, state.partVolume, clamped)
-      update({ supportPctOfMass: Math.min((serverPctRef.current + elevPct) / 100, 0.80) })
+    if (analysisReadyRef.current) {
+      setSettingsDirty(true)
+      // Elevation is client-only — update support % immediately from cached server pct
+      if (state.partVolume > 0 && state.partProjectedArea > 0) {
+        const elevPct = elevationPct(state.partProjectedArea, state.partVolume, clamped)
+        update({ supportPctOfMass: Math.min((serverPctRef.current + elevPct) / 100, 0.80) })
+      }
     }
   }, [state.partVolume, state.partProjectedArea, elevationPct, update])
+
+  const handleAnalyze = useCallback(async () => {
+    if (!fileRef.current) return
+    await parseOnServer(fileRef.current, state.buildDirection, overhangAngle, fillDensity)
+  }, [parseOnServer, state.buildDirection, overhangAngle, fillDensity])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -589,6 +584,11 @@ export function PartStep({ state, update, onNext }: Props) {
           {parseError && (
             <p className="text-danger text-sm flex items-center gap-1">
               <Info size={13} />{parseError}
+            </p>
+          )}
+          {threeGeo && !analysisReady && !parsing && (
+            <p className="text-text-muted text-xs text-center">
+              Configure settings below, then click <span className="text-accent-blue font-medium">Analyze Part</span> to compute geometry.
             </p>
           )}
 
@@ -678,7 +678,7 @@ export function PartStep({ state, update, onNext }: Props) {
 
             {state.partFileName && (
               <p className="text-text-muted text-xs flex items-center gap-1">
-                <Info size={11} /> Changing orientation auto-refreshes geometry, viewer, and support estimate
+                <Info size={11} /> Changing orientation updates the 3D viewer. Re-analyze to update geometry stats.
               </p>
             )}
           </div>
@@ -701,7 +701,7 @@ export function PartStep({ state, update, onNext }: Props) {
             </p>
           </div>
 
-          {/* Overhang angle — only shown after file upload */}
+          {/* Overhang angle & support settings — only shown after file upload */}
           {threeGeo && (
             <div className="card border-bg-border/50 space-y-2">
               <div className="flex items-center justify-between">
@@ -834,6 +834,20 @@ export function PartStep({ state, update, onNext }: Props) {
               </div>
             </div>
           )}
+
+          {/* Analyze / Re-analyze button */}
+          {threeGeo && (!analysisReady || settingsDirty) && (
+            <button
+              onClick={handleAnalyze}
+              disabled={parsing}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              {parsing
+                ? <><Loader2 size={16} className="animate-spin" /> Analyzing…</>
+                : <><ChevronRight size={16} /> {settingsDirty ? 'Re-analyze Part' : 'Analyze Part'}</>
+              }
+            </button>
+          )}
         </div>
 
         {/* Right column: 3D viewer */}
@@ -870,8 +884,13 @@ export function PartStep({ state, update, onNext }: Props) {
       </div>
 
       {/* ── Parsed geometry stats ── */}
-      {state.geometry && (
+      {state.geometry && analysisReady && (
         <div className="card border-success/20 bg-success/5">
+          {settingsDirty && (
+            <div className="mb-3 flex items-center gap-1.5 text-xs text-warning">
+              <AlertCircle size={12} /> Settings changed — results may be out of date. Click Re-analyze to update.
+            </div>
+          )}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-success" />
@@ -911,9 +930,9 @@ export function PartStep({ state, update, onNext }: Props) {
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 h-px bg-bg-border" />
           <span className="text-text-muted text-xs font-semibold uppercase tracking-wider px-1">
-            {state.geometry
+            {analysisReady
               ? 'Part Parameters — auto-filled from STL · edit to override'
-              : 'Part Parameters — enter manually, or upload STL above to auto-fill'}
+              : 'Part Parameters — enter manually, or upload STL above and click Analyze'}
           </span>
           <div className="flex-1 h-px bg-bg-border" />
         </div>
