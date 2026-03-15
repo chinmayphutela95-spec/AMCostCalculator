@@ -61,6 +61,10 @@ class CostInputs:
     # Multi-laser configuration
     laser_multiplier: int = 1   # effective lasers contributing to print speed (1 = single laser)
 
+    # Elevation: height of part bottom above build plate (cm); kept separate from part_height
+    # so that 3D-packing layer counts and job_height are computed correctly.
+    elevation_cm: float = 0.0
+
     # User override: if set, skip packing calculation and use this value directly
     parts_per_build_override: Optional[int] = None
 
@@ -211,19 +215,25 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
     support_mass_per_part = inputs.support_pct_of_mass * inputs.part_mass  # kg
 
     # --- Step 0: Packing / Build Planning ---
-    # Guard: part must physically fit inside the machine's build envelope
-    if inputs.part_height > 0 and inputs.part_height > inputs.build_height:
+    # Effective height = raw part geometry height + elevation gap above build plate.
+    effective_height = inputs.part_height + inputs.elevation_cm
+    if effective_height > 0 and effective_height > inputs.build_height:
         raise ValueError(
-            f"Part height ({inputs.part_height * 10:.1f} mm) exceeds machine build height "
-            f"({inputs.build_height * 10:.0f} mm). The part does not fit in this machine."
+            f"Effective height ({effective_height * 10:.1f} mm = "
+            f"{inputs.part_height * 10:.1f} mm part + {inputs.elevation_cm * 10:.1f} mm gap) "
+            f"exceeds machine build height ({inputs.build_height * 10:.0f} mm)."
         )
 
+    # For 3D packing: the elevation gap applies only to the bottom of the first layer.
+    # Subsequent stacked layers sit directly on top — no additional gap between them.
+    # Available height for part stacking = build_height - elevation_cm.
     layers = 1  # number of part layers stacked vertically (only >1 for 3D packing)
     if inputs.parts_per_build_override and inputs.parts_per_build_override > 0:
         parts_per_build = inputs.parts_per_build_override
     else:
-        if inputs.packing_policy == "3D":
-            layers = math.floor(inputs.build_height / inputs.part_height) if inputs.part_height > 0 else 1
+        if inputs.packing_policy == "3D" and inputs.part_height > 0:
+            available_z = inputs.build_height - inputs.elevation_cm
+            layers = max(1, math.floor(available_z / inputs.part_height))
         parts_per_layer = (
             inputs.build_area / inputs.part_projected_area * inputs.packing_fraction
             if inputs.part_projected_area > 0
@@ -233,9 +243,9 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
 
     num_builds = math.ceil(inputs.production_run / parts_per_build)
 
-    # Actual Z-extent of powder bed for this job.
-    # For 3D packing the powder bed spans all stacked layers; for 2D (or override) it's one part height.
-    job_height = layers * inputs.part_height
+    # Actual Z-extent of powder bed:
+    #   elevation gap (once, at bottom) + all stacked part layers above it.
+    job_height = inputs.elevation_cm + layers * inputs.part_height
 
     # --- Cost Category 1: Material ---
     total_part_material = inputs.production_run * inputs.part_mass           # kg
@@ -247,11 +257,9 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
         num_builds * inputs.build_area * job_height * inputs.material_density / 1000
     )  # kg
 
-    recycled_material = (
-        (total_build_material - total_part_material - total_support_material)
-        * inputs.recycling_fraction
-    )
-    material_waste = total_build_material - recycled_material - total_part_material - total_support_material
+    unfused_powder = max(0.0, total_build_material - total_part_material - total_support_material)
+    recycled_material = unfused_powder * inputs.recycling_fraction
+    material_waste = unfused_powder - recycled_material
     material_required = material_waste + total_support_material + total_part_material
     material_cost = material_required * inputs.material_cost_per_kg
 
