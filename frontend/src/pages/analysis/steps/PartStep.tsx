@@ -26,8 +26,9 @@ function OverhangMesh({ geometry, buildAxis, overhangAngle, elevationMm }: {
 
     const buildVec = [0, 0, 0]
     buildVec[buildAxis] = 1.0
-    // Angle is measured from horizontal; face needs support when its normal · up < -sin(angle)
-    const threshold = -Math.sin((overhangAngle * Math.PI) / 180)
+    // Angle α from horizontal; face needs support when its normal · build < -cos(α)
+    // (surface at α from horizontal has normal·build = -cos(α); overhang when α < threshold angle)
+    const threshold = -Math.cos((overhangAngle * Math.PI) / 180)
 
     // When sitting directly on the plate, the bottom face is supported — exclude it
     geo.computeBoundingBox()
