@@ -422,10 +422,12 @@ export function PartStep({ state, update, onNext }: Props) {
 
   const [analysisReady, setAnalysisReady] = useState(!!state.geometry)
   const [settingsDirty, setSettingsDirty] = useState(false)
+  const [directionLoading, setDirectionLoading] = useState(false)
   const analysisReadyRef = useRef(!!state.geometry) // stable ref for use inside effects/callbacks
 
   const fileRef = useRef<File | null>(null)
   const loaderRef = useRef(new STLLoader())
+  const loadCounterRef = useRef(0) // incremented on each load; stale completions are discarded
   // Server's estimated_support_pct (0–100, overhang only — elevation added on top)
   const serverPctRef = useRef(0)
 
@@ -469,16 +471,21 @@ export function PartStep({ state, update, onNext }: Props) {
   // Pre-rotate so the chosen build axis always points up (screen Y).
   // After this rotation all downstream components (plate, overhang, camera)
   // can unconditionally treat Y as the build direction.
+  // A load counter prevents stale async loads from overwriting a newer result.
   const loadViewer = useCallback((file: File, direction: string) => {
+    const thisLoad = ++loadCounterRef.current
+    setDirectionLoading(true)
     const url = URL.createObjectURL(file)
     loaderRef.current.load(url, (geo: THREE.BufferGeometry) => {
+      URL.revokeObjectURL(url)
+      if (thisLoad !== loadCounterRef.current) return  // stale load — discard
       geo.computeVertexNormals()
       geo.center()
       geo.applyMatrix4(getBuildRotation(direction))
       geo.computeVertexNormals()
       geo.computeBoundingBox()
       setThreeGeo(geo)
-      URL.revokeObjectURL(url)
+      setDirectionLoading(false)
     })
   }, [])
 
@@ -702,8 +709,15 @@ export function PartStep({ state, update, onNext }: Props) {
           </div>
 
           {/* Overhang angle & support settings — only shown after file upload */}
+          {/* Locked while direction is loading to prevent computing overhang on a stale geometry */}
           {threeGeo && (
-            <div className="card border-bg-border/50 space-y-2">
+            <div className={`card border-bg-border/50 space-y-2 transition-opacity ${directionLoading ? 'opacity-40 pointer-events-none' : ''}`}>
+              {directionLoading && (
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Loader2 size={11} className="animate-spin" />
+                  Updating orientation — overhang controls locked until ready
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <label className="label mb-0">Overhang Threshold</label>
