@@ -354,10 +354,10 @@ function getBuildRotation(dir: string): THREE.Matrix4 {
   switch (dir.toLowerCase()) {
     case 'y':   return m                                       // Y up — already correct
     case '-y':  return m.makeRotationX(Math.PI)               // Y down → flip
-    case 'z':   return m.makeRotationX(Math.PI / 2)           // Z up → tilt forward
-    case '-z':  return m.makeRotationX(-Math.PI / 2)          // Z down
-    case 'x':   return m.makeRotationZ(-Math.PI / 2)          // X up
-    case '-x':  return m.makeRotationZ(Math.PI / 2)           // X down
+    case 'z':   return m.makeRotationX(-Math.PI / 2)          // Z up → [0,0,1]→[0,1,0]
+    case '-z':  return m.makeRotationX(Math.PI / 2)           // -Z up → [0,0,-1]→[0,1,0]
+    case 'x':   return m.makeRotationZ(Math.PI / 2)           // X up → [1,0,0]→[0,1,0]
+    case '-x':  return m.makeRotationZ(-Math.PI / 2)          // -X up → [-1,0,0]→[0,1,0]
     default: {
       // custom:nx,ny,nz — rotate build_vec to Y-up
       let bv = new THREE.Vector3(0, 1, 0)
