@@ -496,7 +496,7 @@ export function PartStep({ state, update, onNext }: Props) {
 
   // ── Re-orient viewer when build direction changes; mark dirty if already analyzed ──
   useEffect(() => {
-    if (fileRef.current && state.partFileName) {
+    if (fileRef.current) {
       loadViewer(fileRef.current, state.buildDirection)
       if (analysisReadyRef.current) setSettingsDirty(true)
     }

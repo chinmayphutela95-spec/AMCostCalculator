@@ -200,7 +200,7 @@ def estimate_support_volume(
         face_areas     = np.asarray(mesh.area_faces,       dtype=float)
         face_centroids = np.asarray(mesh.triangles_center, dtype=float)
 
-        threshold    = -math.cos(math.radians(overhang_angle_deg))
+        threshold    = -math.sin(math.radians(overhang_angle_deg))
         dot_products = face_normals @ build_vec
         overhang_mask = dot_products < threshold
 
