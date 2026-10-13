@@ -359,7 +359,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
                     className="input-field flex-1"
                     placeholder={`Auto: ${suggestedPpb}`}
                     value={state.partsPerBuildOverride ?? ''}
-                    onChange={e => update({ partsPerBuildOverride: e.target.value === '' ? undefined : Math.max(1, +e.target.value) })}
+                    onChange={e => update({ partsPerBuildOverride: e.target.value === '' ? undefined : Math.max(1, Math.round(+e.target.value)) })}
                   />
                   {state.partsPerBuildOverride && (
                     <button onClick={() => update({ partsPerBuildOverride: undefined })} className="btn-secondary text-xs px-3">Reset</button>

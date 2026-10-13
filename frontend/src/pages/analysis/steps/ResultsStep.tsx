@@ -24,7 +24,7 @@ const DARK_TOOLTIP = {
 type CompareEntry = { machineName: string; costPerPart: number; totalCost: number; partsPerBuild: number; numBuilds: number }
 
 export function ResultsStep({ state, update, onBack, onReset }: Props) {
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(!!state.selectedMachineId)  // runCalc starts on mount
   const [error, setError] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -33,8 +33,10 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
   const [compareResults, setCompareResults] = useState<CompareEntry[]>([])
   const [compareLoading, setCompareLoading] = useState(false)
 
+  // Recalculate every time Results opens, so changes made after going Back
+  // (e.g. the parts-per-build override) are always reflected
   useEffect(() => {
-    if (!state.result) runCalc()
+    runCalc()
     if (state.compareMachines && state.compareMachines.length > 0) runComparison()
   }, [])
 
@@ -45,48 +47,14 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     if (!state.selectedMachineId) return
     setLoading(true); setError('')
     try {
-      const payload = {
-        part_mass: state.partVolume * state.materialDensity / 1000,
-        part_volume: state.partVolume,
-        part_height: state.partHeight,
-        elevation_mm: state.elevationMm ?? 0,
-        part_projected_area: state.partProjectedArea,
-        support_pct_of_mass: state.supportPctOfMass,
-        production_run: state.productionRun,
-        machine_id: state.selectedMachineId,
-        material_id: state.selectedMaterialId,
-        material_cost_per_kg: state.materialCostPerKg,
-        material_density: state.materialDensity,
-        inert_gas_cost: state.inertGasCost,
-        consumable_cost_per_build: state.consumableCostPerBuild,
-        hours_per_day: state.hoursPerDay,
-        days_per_week: state.daysPerWeek,
-        salary_engineer: state.salaryEngineer,
-        salary_operator: state.salaryOperator,
-        salary_technician: state.salaryTechnician,
-        heat_treatment_enabled: state.heatTreatmentEnabled,
-        heat_treatment_cost_per_build: state.heatTreatmentCostPerBuild,
-        part_separation_enabled: state.partSeparationEnabled,
-        part_separation_cost_per_part: state.partSeparationCostPerPart,
-        hip_enabled: state.hipEnabled,
-        hip_cost_per_part: state.hipCostPerPart,
-        surface_treatment_enabled: state.surfaceTreatmentEnabled,
-        surface_treatment_cost_per_part: state.surfaceTreatmentCostPerPart,
-        ndt_enabled: state.ndtEnabled,
-        ndt_cost_per_part: state.ndtCostPerPart,
-        material_build_rate: state.materialBuildRate,
-        layer_thickness_um: state.layerThicknessUm,
-        laser_strategy: state.laserStrategy,
-        lasers_per_part: state.lasersPerPart,
-        recoating_efficiency: state.recoatingEfficiency ?? 1.0,
-      }
-      const data = await analysisApi.calculate(payload)
+      const data = await analysisApi.calculate({ ...basePayload(), machine_id: state.selectedMachineId })
       update({ result: data.result, quantityCurve: data.quantity_curve })
     } catch (e: any) {
       setError(e.response?.data?.detail || e.message || 'Calculation failed')
     } finally { setLoading(false) }
   }
 
+  // Calculation inputs shared by the main result and the machine comparison
   const basePayload = () => ({
     part_mass: state.partVolume * state.materialDensity / 1000,
     part_volume: state.partVolume,
