@@ -21,7 +21,7 @@ export function Dashboard() {
   const recentProjects = projects.slice(0, 5)
 
   return (
-    <div className="min-h-screen p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <div className="hero-card">
