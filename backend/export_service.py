@@ -39,10 +39,38 @@ def _pct_float(v, total) -> float:
 
 # ─── Chart helpers (matplotlib → PNG bytes) ───────────────────────────────────
 
-_CHART_COLORS = [
-    "#2563EB", "#0891B2", "#7C3AED", "#D97706",
-    "#059669", "#DC2626", "#EA580C", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899",
-]
+# TII theme, same as the web app: purple primary, green secondary, black text on white
+_TII_PURPLE = "#6400FF"
+_TII_GREEN  = "#00B989"
+_INK        = "#000000"
+_TEXT_2     = "#3F3F46"
+_MUTED      = "#71717A"
+_GRID       = "#E4E4E7"
+
+# Fixed colour per cost category - matches CATEGORY_COLORS in frontend/src/lib/utils.ts
+# (both report spellings of each category name are listed)
+_CATEGORY_COLORS = {
+    "Material":          _TII_GREEN,
+    "Machine Usage":     _TII_PURPLE,
+    "Labor":             "#EB6834",
+    "Consumables":       "#2A78D6",
+    "Build Preparation": "#EDA100",
+    "Build Prep":        "#EDA100",
+    "Post-Process":      "#E87BA4",
+    "Part Separation":   "#008300",
+    "Heat Treatment":    "#E34948",
+    "HIP":               "#4A3AA7",
+    "Surface Treatment": "#9085E9",
+    "NDT / Inspection":  "#000000",
+}
+
+
+def _style_axes(ax, title):
+    ax.set_facecolor("white")
+    ax.set_title(title, color=_INK, fontsize=11, pad=10, fontweight="bold")
+    ax.tick_params(colors=_MUTED, labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_edgecolor(_GRID)
 
 
 def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
@@ -53,20 +81,13 @@ def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
 
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor("white")
-    ax.set_facecolor("#F8FAFC")
 
-    bar_colors = colors or _CHART_COLORS[:len(labels)]
-
-    bars = ax.bar(labels, values, color=bar_colors, width=0.6, zorder=3)
-    ax.set_title(title, color="#1E293B", fontsize=11, pad=10, fontweight="bold")
-    ax.tick_params(colors="#475569", labelsize=8)
+    # Categories are named on the axis, so one brand colour (as in the app)
+    bars = ax.bar(labels, values, color=colors or _TII_PURPLE, width=0.6, zorder=3)
+    _style_axes(ax, title)
     ax.xaxis.set_tick_params(rotation=30)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#CBD5E1")
-    ax.yaxis.set_tick_params(colors="#475569")
-    ax.xaxis.set_tick_params(colors="#475569")
-    ax.grid(axis="y", color="#E2E8F0", linestyle="--", linewidth=0.7, zorder=0)
+    ax.grid(axis="y", color=_GRID, linestyle="--", linewidth=0.7, zorder=0)
     ax.set_xlabel("")
 
     for bar, val in zip(bars, values):
@@ -75,7 +96,7 @@ def _make_bar_chart(labels, values, title="", colors=None, figsize=(7, 3.5)):
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() * 1.02,
                 f"${val:,.0f}",
-                ha="center", va="bottom", color="#334155", fontsize=7, fontweight="bold"
+                ha="center", va="bottom", color=_TEXT_2, fontsize=7, fontweight="bold"
             )
 
     plt.tight_layout()
@@ -91,31 +112,27 @@ def _make_pie_chart(labels, values, title="", figsize=(5, 3.8)):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    filtered = [(l, v, c) for l, v, c in zip(labels, values, _CHART_COLORS[:len(labels)]) if v > 0]
+    filtered = [(l, v, _CATEGORY_COLORS.get(l, _MUTED)) for l, v in zip(labels, values) if v > 0]
     if not filtered:
         return None
     fl, fv, fc = zip(*filtered)
+    total = sum(fv)
 
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
 
-    wedges, texts, autotexts = ax.pie(
-        fv, labels=None, colors=fc, autopct="%1.1f%%",
-        startangle=140, pctdistance=0.78,
-        wedgeprops={"linewidth": 0.5, "edgecolor": "white"}
+    # Shares go in the legend next to each colour (readable on any slice colour, as in the app)
+    wedges, _ = ax.pie(
+        fv, labels=None, colors=fc, startangle=140,
+        wedgeprops={"linewidth": 1.5, "edgecolor": "white"}
     )
-    for at in autotexts:
-        at.set_color("#1E293B")
-        at.set_fontsize(7)
-        at.set_fontweight("bold")
-
     ax.legend(
-        wedges, [f"{l}" for l in fl],
+        wedges, [f"{l}  {v / total * 100:.1f}%" for l, v in zip(fl, fv)],
         loc="center left", bbox_to_anchor=(1, 0.5),
-        fontsize=8, frameon=False, labelcolor="#334155"
+        fontsize=8, frameon=False, labelcolor=_TEXT_2
     )
-    ax.set_title(title, color="#1E293B", fontsize=11, pad=8, fontweight="bold")
+    ax.set_title(title, color=_INK, fontsize=11, pad=8, fontweight="bold")
 
     plt.tight_layout()
     buf = io.BytesIO()
@@ -141,24 +158,21 @@ def _make_line_chart(quantity_curve, current_qty=None, figsize=(9, 3.8)):
 
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor("white")
-    ax.set_facecolor("#F8FAFC")
 
-    ax.plot(qs, cpp, color="#2563EB", linewidth=2,   label="Total $/part")
-    ax.plot(qs, mat, color="#0891B2", linewidth=1.4, label="Material $/part", linestyle="--")
-    ax.plot(qs, mac, color="#7C3AED", linewidth=1.4, label="Machine $/part",  linestyle="--")
+    # Total in black; material/machine in their category colours (as in the app)
+    ax.plot(qs, cpp, color=_INK, linewidth=2, label="Total $/part")
+    ax.plot(qs, mat, color=_CATEGORY_COLORS["Material"], linewidth=1.4, label="Material $/part", linestyle="--")
+    ax.plot(qs, mac, color=_CATEGORY_COLORS["Machine Usage"], linewidth=1.4, label="Machine $/part", linestyle="--")
 
     if current_qty:
-        ax.axvline(current_qty, color="#D97706", linestyle=":", linewidth=1.5,
+        ax.axvline(current_qty, color=_MUTED, linestyle=":", linewidth=1.5,
                    label=f"Current qty ({current_qty:,})")
 
-    ax.set_title("Cost per Part vs Production Quantity", color="#1E293B", fontsize=11, pad=10, fontweight="bold")
-    ax.tick_params(colors="#475569", labelsize=8)
+    _style_axes(ax, "Cost per Part vs Production Quantity")
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):,}"))
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#CBD5E1")
-    ax.grid(color="#E2E8F0", linestyle="--", linewidth=0.6)
-    ax.legend(fontsize=8, frameon=True, framealpha=0.8, edgecolor="#E2E8F0", labelcolor="#334155")
+    ax.grid(color=_GRID, linestyle="--", linewidth=0.6)
+    ax.legend(fontsize=8, frameon=True, framealpha=0.9, edgecolor=_GRID, labelcolor=_TEXT_2)
 
     plt.tight_layout()
     buf = io.BytesIO()
@@ -200,18 +214,20 @@ def export_to_excel(
 
         wb = Workbook()
 
-        # ── Palette (black & white modern) ────────────────────────────────────
-        INK_XL      = "111827"   # near-black banners & totals
-        HDR_XL      = "1F2937"   # table column headers
-        SEC_XL      = "374151"   # section sub-headers
+        # ── Palette (TII theme, same as the web app) ──────────────────────────
+        INK_XL      = "6400FF"   # TII purple — sheet banners, totals, key figures
+        HDR_XL      = "000000"   # black — table and section headers
+        SEC_XL      = "008562"   # TII green, darker step so white text stays readable
         WHITE       = "FFFFFF"
         ALT         = "F9FAFB"   # alternating row tint
         GREY_LIGHT  = "FFFFFF"   # even rows — plain white
+        TEXT_XL     = "000000"
+        MUTED_XL    = "71717A"
 
         def _font(bold=False, color=None, size=10, italic=False):
-            return Font(name="Calibri", bold=bold, color=color or "111827", size=size, italic=italic)
+            return Font(name="Calibri", bold=bold, color=color or TEXT_XL, size=size, italic=italic)
 
-        _side = Side(style="thin", color="E5E7EB")
+        _side = Side(style="thin", color="E4E4E7")
         _border = Border(left=_side, right=_side, top=_side, bottom=_side)
         _center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         _right  = Alignment(horizontal="right",  vertical="center")
@@ -227,7 +243,7 @@ def export_to_excel(
             c.alignment = align
             return c
 
-        def val_cell(ws, row, col, value, bold=False, color="111827", align=None, fmt=None, bg=None):
+        def val_cell(ws, row, col, value, bold=False, color=TEXT_XL, align=None, fmt=None, bg=None):
             c = ws.cell(row=row, column=col, value=value)
             c.font   = _font(bold=bold, color=color)
             c.border = _border
@@ -310,7 +326,7 @@ def export_to_excel(
         ws1.merge_cells("A3:D3")
         sub = ws1["A3"]
         sub.value     = f"Project: {project_name}  ·  Machine: {machine_name}  ·  Material: {material_name}  ·  {datetime.now().strftime('%B %d, %Y')}"
-        sub.font      = Font(name="Calibri", color="6B7280", size=9, italic=True)
+        sub.font      = Font(name="Calibri", color=MUTED_XL, size=9, italic=True)
         sub.fill      = fill(ALT)
         sub.alignment = Alignment(horizontal="left", vertical="center", indent=2)
         ws1.row_dimensions[3].height = 16
@@ -327,7 +343,7 @@ def export_to_excel(
         ws1.row_dimensions[5].height = 8   # spacer
         for i, (label, value) in enumerate(kpis, 1):
             c_label = ws1.cell(row=6, column=i, value=label)
-            c_label.font      = Font(name="Calibri", bold=True, color="6B7280", size=9)
+            c_label.font      = Font(name="Calibri", bold=True, color=MUTED_XL, size=9)
             c_label.fill      = fill(WHITE)
             c_label.alignment = Alignment(horizontal="center", vertical="center")
             c_label.border    = Border(top=Side(style="medium", color=INK_XL),
@@ -387,7 +403,7 @@ def export_to_excel(
             for c in (c1, c2):
                 c.fill   = fill(bg)
                 c.border = _border
-                c.font   = _font(color="374151", size=9)
+                c.font   = _font(color="3F3F46", size=9)
             c1.alignment = _left
             c2.alignment = _right
 
@@ -481,7 +497,7 @@ def export_to_excel(
         ws3.row_dimensions[1].height = 28
         for col in range(2, 4): ws3.cell(row=1, column=col).fill = fill(INK_XL)
         ws3["A2"].value = project_name
-        ws3["A2"].font  = Font(name="Calibri", color="6B7280", size=9, italic=True)
+        ws3["A2"].font  = Font(name="Calibri", color=MUTED_XL, size=9, italic=True)
         ws3.row_dimensions[2].height = 14
 
         r3 = 4
@@ -748,14 +764,14 @@ def export_to_pdf(
         MARGIN  = 1.8 * cm
         COL_W   = PAGE_W - 2 * MARGIN
 
-        # ── Palette (black & white modern) ────────────────────────────────────
-        INK      = colors.HexColor("#111827")   # near-black — headings, banners
-        HDR_BG   = colors.HexColor("#1F2937")   # table/section headers
-        ALT      = colors.HexColor("#F9FAFB")   # alternating row tint
+        # ── Palette (TII theme, same as the web app) ──────────────────────────
+        INK      = colors.HexColor(_TII_PURPLE)  # cover banner, accent rules, TOTAL rows
+        HDR_BG   = colors.HexColor(_INK)         # table headers (black)
+        ALT      = colors.HexColor("#F9FAFB")    # alternating row tint
         WHITE    = colors.white
-        DARK     = colors.HexColor("#111827")   # body text
-        MUTED    = colors.HexColor("#6B7280")   # labels / captions
-        DIVIDER  = colors.HexColor("#E5E7EB")   # borders
+        DARK     = colors.HexColor(_INK)         # body text
+        MUTED    = colors.HexColor(_MUTED)       # labels / captions
+        DIVIDER  = colors.HexColor(_GRID)        # borders
 
         # ── Style factory ─────────────────────────────────────────────────────
         def _s(name, **kw):
@@ -765,7 +781,7 @@ def export_to_pdf(
 
         s_title   = _s("Ti", fontSize=20, textColor=WHITE, fontName="Helvetica-Bold",
                         leading=24)
-        s_sub     = _s("Su", fontSize=8.5, textColor=colors.HexColor("#9CA3AF"),
+        s_sub     = _s("Su", fontSize=8.5, textColor=colors.HexColor("#E9DDFF"),  # light purple on the purple banner
                         leading=12)
         s_label   = _s("Lb", fontSize=8, textColor=MUTED, leading=11)
         s_val     = _s("Vl", fontSize=8.5, textColor=DARK, fontName="Helvetica-Bold",
@@ -823,13 +839,14 @@ def export_to_pdf(
             return tbl
 
         def _sec_hdr(text):
-            """Section header — thin black left bar, light gray background, dark text."""
-            data = [["", Paragraph(text.upper(), _s("SH", fontSize=8, textColor=INK,
+            """Section header — thin purple left bar, light gray background, black text."""
+            data = [["", Paragraph(text.upper(), _s("SH", fontSize=8, textColor=DARK,
                                                      fontName="Helvetica-Bold", leading=10))]]
-            tbl = Table(data, colWidths=[4, COL_W - 4])
+            tbl = Table(data, colWidths=[4, COL_W - 4], spaceAfter=6)
+            tbl.keepWithNext = True   # never leave a heading alone at the bottom of a page
             tbl.setStyle(TableStyle([
                 ('BACKGROUND',   (0, 0), (0, 0), INK),
-                ('BACKGROUND',   (1, 0), (1, 0), colors.HexColor("#F3F4F6")),
+                ('BACKGROUND',   (1, 0), (1, 0), colors.HexColor("#F4F4F5")),
                 ('LEFTPADDING',  (0, 0), (-1, -1), 5),
                 ('RIGHTPADDING', (0, 0), (-1, -1), 5),
                 ('TOPPADDING',   (0, 0), (-1, -1), 5),
@@ -961,7 +978,6 @@ def export_to_pdf(
                 px_w = px_h = 0
             if px_w and px_h:
                 story.append(_sec_hdr("Part Geometry — 3D View · Overhangs · Bounding Box"))
-                story.append(Spacer(1, 6))
 
                 # Fit inside the column width and a max height, keeping aspect ratio
                 scale = min((COL_W - 8) / px_w, 8.5 * cm / px_h)
@@ -1021,7 +1037,6 @@ def export_to_pdf(
 
         if active_cats:
             story.append(_sec_hdr("Cost Analysis Charts"))
-            story.append(Spacer(1, 6))
 
             bar_png = _make_bar_chart(
                 [n for n, _ in active_cats], [v for _, v in active_cats],
@@ -1056,8 +1071,7 @@ def export_to_pdf(
         if quantity_curve:
             lc_png = _make_line_chart(quantity_curve, current_qty=prod_run, figsize=LC_FS)
             if lc_png:
-                story.append(_sec_hdr("Cost per Part vs Production Quantity"))
-                story.append(Spacer(1, 6))
+                lc_hdr = _sec_hdr("Cost per Part vs Production Quantity")
                 lc_im = _chart_img(lc_png, COL_W - 8, *LC_FS)
                 lct = Table([[lc_im]], colWidths=[COL_W])
                 lct.setStyle(TableStyle([
@@ -1070,14 +1084,14 @@ def export_to_pdf(
                     ('BOTTOMPADDING',(0, 0), (-1, -1), 2),
                     ('BOX',          (0, 0), (-1, -1), 0.5, _BORDER),
                 ]))
-                story.append(lct)
+                # Keep the heading on the same page as its chart
+                story.append(KeepTogether([lc_hdr, lct]))
                 story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
         # COST BREAKDOWN TABLE
         # ═════════════════════════════════════════════════════════════════════
         story.append(_sec_hdr("Cost Breakdown by Category"))
-        story.append(Spacer(1, 6))
 
         bk_hdrs = [
             Paragraph(h, _s("BH", fontSize=8, textColor=WHITE,
@@ -1097,7 +1111,7 @@ def export_to_pdf(
         bk_ts.add('TEXTCOLOR',  (0, last), (-1, last), WHITE)
         bk_ts.add('FONTNAME',   (0, last), (-1, last), 'Helvetica-Bold')
         bk_tbl.setStyle(bk_ts)
-        story.append(KeepTogether([bk_tbl]))
+        story.append(bk_tbl)
         story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
@@ -1105,7 +1119,6 @@ def export_to_pdf(
         # ═════════════════════════════════════════════════════════════════════
         mach_r = results.get("machine", {})
         story.append(_sec_hdr("Machine Time Breakdown"))
-        story.append(Spacer(1, 6))
 
         time_hdrs = [Paragraph(h, s_tbl_hdr)
                      for h in ["Phase", "Time (hr)", "Notes"]]
@@ -1130,7 +1143,7 @@ def export_to_pdf(
         t_ts.add('TEXTCOLOR',  (0, tl), (-1, tl), WHITE)
         t_ts.add('FONTNAME',   (0, tl), (-1, tl), 'Helvetica-Bold')
         t_tbl.setStyle(t_ts)
-        story.append(KeepTogether([t_tbl]))
+        story.append(t_tbl)
         story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
@@ -1138,7 +1151,6 @@ def export_to_pdf(
         # ═════════════════════════════════════════════════════════════════════
         mat_r = results.get("material", {})
         story.append(_sec_hdr("Material & Part Details"))
-        story.append(Spacer(1, 6))
 
         half = (COL_W - 8) / 2
         mat_rows = [
@@ -1168,14 +1180,13 @@ def export_to_pdf(
             ('RIGHTPADDING', (0, 0), (0, -1),  4),
             ('RIGHTPADDING', (1, 0), (1, -1),  0),
         ]))
-        story.append(KeepTogether([two_col]))
+        story.append(two_col)
         story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
         # MACHINE & PROCESS CONFIGURATION
         # ═════════════════════════════════════════════════════════════════════
         story.append(_sec_hdr("Machine & Process Configuration"))
-        story.append(Spacer(1, 6))
 
         machine_rows = [
             ("Machine",              inputs.get("machine_name", "–")),
@@ -1201,7 +1212,7 @@ def export_to_pdf(
                 else [("Recoating Efficiency", _f((inputs.get("recoating_efficiency") or 0.75) * 100, 0, "%"))]
             ),
         ]
-        story.append(KeepTogether([_kv_tbl(machine_rows)]))
+        story.append(_kv_tbl(machine_rows))
         story.append(Spacer(1, 12))
 
         # ═════════════════════════════════════════════════════════════════════
