@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, PlusCircle, Clock, Cpu, FlaskConical, Settings, Zap, LogOut } from 'lucide-react'
+import { LayoutDashboard, PlusCircle, Clock, Cpu, FlaskConical, Settings, LogOut } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
+import tiiMark from '../../assets/tii-mark.png'
 
 const nav = [
   { to: '/',          icon: LayoutDashboard, label: 'Dashboard',    end: true },
@@ -19,9 +20,7 @@ export function Sidebar() {
 
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-bg-border shrink-0">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-blue to-accent-cyan flex items-center justify-center shadow-glow-blue shrink-0">
-          <Zap size={15} className="text-white" strokeWidth={2.5} />
-        </div>
+        <img src={tiiMark} alt="Technology Innovation Institute" className="h-8 w-auto shrink-0" />
         <div className="leading-tight">
           <div className="text-text-primary font-bold text-sm tracking-tight">Metal AM</div>
           <div className="text-text-muted text-xs font-medium">Cost Analyzer</div>
@@ -36,7 +35,7 @@ export function Sidebar() {
               <span className={[
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer select-none',
                 isActive
-                  ? 'bg-accent-blue/10 text-accent-blue border border-accent-blue/25 glow-blue'
+                  ? 'bg-accent-blue/10 text-accent-blue border border-accent-blue/25'
                   : 'text-text-muted hover:text-text-primary hover:bg-bg-hover border border-transparent',
               ].join(' ')}>
                 <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className="shrink-0" />

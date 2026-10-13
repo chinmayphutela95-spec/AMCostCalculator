@@ -11,6 +11,9 @@ import type { AnalysisState } from '../../../types'
 
 // ─── Three.js scene components ────────────────────────────────────────────────
 
+const PART_COLOR = new THREE.Color('#a57cff')       // light TII purple (full #6400FF hides the shading) — self-supporting surfaces
+const OVERHANG_COLOR = new THREE.Color('#f97316')   // orange — faces that need support
+
 function OverhangMesh({ geometry, buildAxis, overhangAngle, elevationMm }: {
   geometry: THREE.BufferGeometry
   buildAxis: number
@@ -46,7 +49,7 @@ function OverhangMesh({ geometry, buildAxis, overhangAngle, elevationMm }: {
         const y0 = pos.getY(i), y1 = pos.getY(i + 1), y2 = pos.getY(i + 2)
         if (Math.min(y0, y1, y2) <= minY + eps) isOverhang = false
       }
-      const [r, g, b] = isOverhang ? [1.0, 0.3, 0.05] : [0.22, 0.52, 0.95]
+      const { r, g, b } = isOverhang ? OVERHANG_COLOR : PART_COLOR
       for (let v = 0; v < 3; v++) {
         colors[(i + v) * 3 + 0] = r
         colors[(i + v) * 3 + 1] = g
@@ -76,13 +79,13 @@ function BoundingBoxWire({ geometry }: { geometry: THREE.BufferGeometry }) {
   }, [geometry])
 
   const labelStyle: React.CSSProperties = {
-    color: '#06b6d4',
+    color: '#008562',
     fontSize: '11px',
     whiteSpace: 'nowrap',
-    background: 'rgba(6,18,40,0.82)',
+    background: 'rgba(255,255,255,0.92)',
     padding: '2px 6px',
     borderRadius: 3,
-    border: '1px solid rgba(6,182,212,0.35)',
+    border: '1px solid rgba(0,185,137,0.45)',
     fontFamily: 'monospace',
     pointerEvents: 'none',
     userSelect: 'none',
@@ -92,7 +95,7 @@ function BoundingBoxWire({ geometry }: { geometry: THREE.BufferGeometry }) {
     <>
       <mesh position={center}>
         <boxGeometry args={[size.x, size.y, size.z]} />
-        <meshBasicMaterial color="#06b6d4" wireframe />
+        <meshBasicMaterial color="#00B989" wireframe />
       </mesh>
 
       {/* X dimension — bottom-front edge center */}
@@ -130,13 +133,13 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
   const sectionSize = Math.max(size.x, size.z) * 0.6
 
   const labelStyle: React.CSSProperties = {
-    color: '#f59e0b',
+    color: '#b45309',
     fontSize: '10px',
     whiteSpace: 'nowrap',
-    background: 'rgba(6,18,40,0.88)',
+    background: 'rgba(255,255,255,0.92)',
     padding: '2px 6px',
     borderRadius: 3,
-    border: '1px solid rgba(245,158,11,0.4)',
+    border: '1px solid rgba(180,83,9,0.4)',
     fontFamily: 'monospace',
     pointerEvents: 'none',
     userSelect: 'none',
@@ -148,10 +151,10 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
       <mesh position={[centerX, plateY - plateH / 2, centerZ]}>
         <boxGeometry args={[plateSize, plateH, plateSize]} />
         <meshStandardMaterial
-          color="#1b3a6e"
-          metalness={0.5}
-          roughness={0.4}
-          opacity={0.18}
+          color="#d4d4d8"
+          metalness={0}
+          roughness={1}
+          opacity={0.12}
           transparent
           depthWrite={false}
           side={THREE.DoubleSide}
@@ -163,10 +166,10 @@ function BuildPlatform({ geometry, elevationMm }: { geometry: THREE.BufferGeomet
         position={[centerX, plateY, centerZ]}
         cellSize={cellSize}
         cellThickness={0.6}
-        cellColor="#2a4a7a"
+        cellColor="#d4d4d8"
         sectionSize={sectionSize}
         sectionThickness={1.2}
-        sectionColor="#4a80cc"
+        sectionColor="#a1a1aa"
         fadeDistance={plateSize}
         fadeStrength={1.5}
       />
@@ -314,7 +317,7 @@ function SnapshotCapture({ captureRef }: { captureRef: React.MutableRefObject<((
       out.width = Math.round(src.width * scale)
       out.height = Math.round(src.height * scale)
       const ctx = out.getContext('2d')!
-      ctx.fillStyle = '#0d1117'  // viewer background (bg-secondary); the WebGL canvas is transparent
+      ctx.fillStyle = '#ffffff'  // viewer background; the WebGL canvas itself is transparent
       ctx.fillRect(0, 0, out.width, out.height)
       ctx.drawImage(src, 0, 0, out.width, out.height)
       return out.toDataURL('image/jpeg', 0.85)
@@ -357,8 +360,10 @@ function StlScene({ geometry, overhangAngle, elevationMm, showSupportVolume }: {
       <Grid
         args={[gridSize, gridSize]}
         position={[0, platformY, 0]}
-        cellColor="#1e2a45"
-        sectionColor="#2d3142"
+        cellSize={gridSize / 80}
+        cellColor="#f0f0f2"
+        sectionSize={gridSize / 16}
+        sectionColor="#e4e4e7"
         fadeDistance={gridSize * 1.5}
         infiniteGrid
       />
@@ -613,7 +618,7 @@ export function PartStep({ state, update, onNext }: Props) {
                 <p className="text-text-muted text-xs">or click to browse · .stl supported</p>
                 <div className="mt-2 pt-2 border-t border-bg-border/40 w-full">
                   <p className="text-text-muted text-xs">
-                    No STL? <span className="text-accent-cyan font-medium">Enter parameters manually below ↓</span>
+                    No STL? <span className="text-accent-green font-medium">Enter parameters manually below ↓</span>
                   </p>
                 </div>
               </div>
@@ -683,7 +688,7 @@ export function PartStep({ state, update, onNext }: Props) {
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-text-secondary">Polar — from +Z axis</span>
-                      <span className="font-mono text-accent-cyan">{customPolar}°</span>
+                      <span className="font-mono text-accent-green">{customPolar}°</span>
                     </div>
                     <input type="range" min={0} max={180} step={1} value={customPolar}
                       className="w-full accent-accent-blue"
@@ -696,7 +701,7 @@ export function PartStep({ state, update, onNext }: Props) {
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-text-secondary">Azimuth — around Z</span>
-                      <span className="font-mono text-accent-cyan">{customAzimuth}°</span>
+                      <span className="font-mono text-accent-green">{customAzimuth}°</span>
                     </div>
                     <input type="range" min={0} max={360} step={1} value={customAzimuth}
                       className="w-full accent-accent-blue"
@@ -706,7 +711,7 @@ export function PartStep({ state, update, onNext }: Props) {
                       <span>0° (+X)</span><span>90° (+Y)</span><span>180° (−X)</span><span>270° (−Y)</span>
                     </div>
                   </div>
-                  <div className="font-mono text-text-muted bg-bg-secondary rounded px-2 py-1">
+                  <div className="font-mono text-text-muted bg-bg-subtle rounded px-2 py-1">
                     build vec [{parts.map(p => p.toFixed(3)).join(', ')}]
                     {parsing && <Loader2 size={10} className="animate-spin inline ml-2" />}
                   </div>
@@ -780,7 +785,7 @@ export function PartStep({ state, update, onNext }: Props) {
               />
               <div className="flex justify-between text-xs text-text-muted">
                 <span>15° (strict)</span>
-                <span className="text-accent-cyan">45° (standard)</span>
+                <span className="text-accent-green">45° (standard)</span>
                 <span>75° (lenient)</span>
               </div>
 
@@ -844,7 +849,7 @@ export function PartStep({ state, update, onNext }: Props) {
                   </p>
                   <p>
                     Support volume = Σ(projected_area × height) × fill density. The
-                    <span className="text-accent-cyan"> Support Structure Type</span> sets the fill
+                    <span className="text-accent-green"> Support Structure Type</span> sets the fill
                     density (e.g. 40% for block, 12% for lattice). A stricter angle flags more
                     faces; a lenient one flags fewer.
                   </p>
@@ -862,7 +867,7 @@ export function PartStep({ state, update, onNext }: Props) {
                   <span className="text-text-muted">Needs support</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" />
+                  <span className="w-3 h-3 rounded-sm bg-accent-blue inline-block" />
                   <span className="text-text-muted">Self-supporting</span>
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -871,7 +876,7 @@ export function PartStep({ state, update, onNext }: Props) {
                 </span>
                 <button
                   onClick={() => setShowSupportVolume(v => !v)}
-                  className={`flex items-center gap-1.5 ml-auto transition-colors ${showSupportVolume ? 'text-orange-400' : 'text-text-muted'}`}
+                  className={`flex items-center gap-1.5 ml-auto transition-colors ${showSupportVolume ? 'text-orange-600' : 'text-text-muted'}`}
                 >
                   <span className="w-3 h-3 rounded-sm inline-block" style={{ background: showSupportVolume ? 'rgba(249,115,22,0.45)' : 'transparent', border: '1px solid #f97316' }} />
                   <span>{showSupportVolume ? 'Hide' : 'Show'} support volume</span>
@@ -1019,7 +1024,7 @@ export function PartStep({ state, update, onNext }: Props) {
               <div className="relative">
                 <input
                   type="number" step="any"
-                  className="input-field pr-10 bg-bg-primary text-text-muted cursor-not-allowed"
+                  className="input-field pr-10 bg-bg-subtle text-text-muted cursor-not-allowed"
                   value={state.partVolume && state.materialDensity
                     ? +(state.partVolume * state.materialDensity / 1000).toFixed(4) : ''}
                   readOnly
@@ -1038,7 +1043,7 @@ export function PartStep({ state, update, onNext }: Props) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">Support Material (% of part mass)</label>
-                <span className="text-accent-cyan font-mono text-sm font-semibold">
+                <span className="text-accent-green font-mono text-sm font-semibold">
                   {(state.supportPctOfMass * 100).toFixed(1)}%
                 </span>
               </div>

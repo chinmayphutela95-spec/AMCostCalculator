@@ -4,14 +4,9 @@ import { materialsApi, apiErrorMessage } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Material } from '../types'
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Steel: 'bg-slate-700/60 text-slate-300',
-  Titanium: 'bg-blue-900/50 text-blue-300',
-  Aluminum: 'bg-yellow-900/50 text-yellow-300',
-  Nickel: 'bg-green-900/50 text-green-300',
-  Cobalt: 'bg-purple-900/50 text-purple-300',
-  Copper: 'bg-orange-900/50 text-orange-300',
-}
+const CHIP = 'badge px-3 py-1 text-xs font-medium rounded-full transition-colors border'
+const chipClass = (active: boolean) =>
+  `${CHIP} ${active ? 'bg-accent-blue border-accent-blue text-white' : 'bg-bg-card border-bg-border text-text-secondary hover:border-accent-blue/50'}`
 
 const DEFAULT: Partial<Material> = {
   name: '', alloy_designation: '', category: 'Steel',
@@ -102,11 +97,11 @@ export function MaterialsPage() {
 
       {/* Category filter chips */}
       <div className="flex gap-2 mb-5 flex-wrap">
-        <button onClick={() => setFilter('')} className={`badge px-3 py-1 text-xs font-medium rounded-full transition-colors ${!filter ? 'bg-accent-blue text-white' : 'bg-bg-card border border-bg-border text-text-secondary hover:border-accent-blue/50'}`}>
+        <button onClick={() => setFilter('')} className={chipClass(!filter)}>
           All ({materials.length})
         </button>
         {categories.map(cat => (
-          <button key={cat} onClick={() => setFilter(cat)} className={`badge px-3 py-1 text-xs font-medium rounded-full transition-colors ${CATEGORY_COLORS[cat] || ''} border border-transparent`}>
+          <button key={cat} onClick={() => setFilter(cat)} className={chipClass(filter === cat)}>
             {cat} ({materials.filter(m => m.category === cat).length})
           </button>
         ))}
@@ -127,7 +122,7 @@ export function MaterialsPage() {
                 <tr key={m.id} className={`border-b border-bg-border hover:bg-bg-hover transition-colors ${i % 2 === 1 ? 'bg-bg-secondary/30' : ''}`}>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <FlaskConical size={13} className="text-accent-cyan shrink-0" />
+                      <FlaskConical size={13} className="text-accent-green shrink-0" />
                       <div>
                         <div className="text-text-primary font-medium flex items-center gap-2">
                           {m.name}
@@ -138,18 +133,18 @@ export function MaterialsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`badge ${CATEGORY_COLORS[m.category] || 'bg-bg-hover text-text-secondary'}`}>{m.category}</span>
+                    <span className="badge bg-bg-subtle text-text-secondary">{m.category}</span>
                   </td>
                   <td className="px-4 py-3 text-right text-text-primary font-mono">${m.cost_per_kg}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.density}</td>
-                  <td className="px-4 py-3 text-right text-accent-cyan font-mono">{m.layer_thickness_um ?? 40}</td>
-                  <td className="px-4 py-3 text-right text-accent-cyan font-mono">{m.build_rate_cm3_hr ?? 10} cm³/hr</td>
+                  <td className="px-4 py-3 text-right text-accent-green font-mono">{m.layer_thickness_um ?? 40}</td>
+                  <td className="px-4 py-3 text-right text-accent-green font-mono">{m.build_rate_cm3_hr ?? 10} cm³/hr</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.yield_strength ?? '–'}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.tensile_strength ?? '–'}</td>
                   <td className="px-4 py-3">
                     {canEdit && (
                       <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
+                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-green p-1.5 rounded transition-colors"><Copy size={13} /></button>
                         <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
                         <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
                       </div>

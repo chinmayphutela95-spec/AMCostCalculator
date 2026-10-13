@@ -94,7 +94,7 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                       className={`card relative transition-all ${
                         isDisabled
                           ? 'opacity-40 cursor-not-allowed bg-bg-secondary'
-                          : `cursor-pointer hover:border-accent-blue/50 ${isSelected ? 'border-accent-blue bg-accent-blue/5 glow-blue' : ''}`
+                          : `cursor-pointer hover:border-accent-blue/50 ${isSelected ? 'border-accent-blue bg-accent-blue/5' : ''}`
                       }`}
                     >
                       {isSelected && !isDisabled && (
@@ -119,7 +119,7 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                           </div>
 
                           {isDisabled && (
-                            <p className="text-xs text-red-400 mt-1 leading-tight">{disabledReason}</p>
+                            <p className="text-xs text-danger mt-1 leading-tight">{disabledReason}</p>
                           )}
 
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
@@ -155,7 +155,7 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
                             <button
                               onClick={(e) => toggleCompare(m.id, e)}
                               className={`mt-2 text-xs px-2.5 py-0.5 rounded border transition-colors ${
-                                isCompare ? 'border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10' : 'border-bg-border text-text-muted hover:border-accent-cyan/50'
+                                isCompare ? 'border-accent-cyan/50 text-accent-green bg-accent-cyan/10' : 'border-bg-border text-text-muted hover:border-accent-cyan/50'
                               }`}
                             >
                               {isCompare ? '✓ In comparison' : 'Add to compare'}
@@ -173,7 +173,7 @@ export function MachineStep({ state, update, onNext, onBack }: Props) {
       )}
 
       {compare.size > 0 && (
-        <div className="p-3 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-xs text-accent-cyan">
+        <div className="p-3 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-xs text-accent-green">
           {compare.size} machine{compare.size > 1 ? 's' : ''} selected for comparison. Results will show a side-by-side cost breakdown.
         </div>
       )}

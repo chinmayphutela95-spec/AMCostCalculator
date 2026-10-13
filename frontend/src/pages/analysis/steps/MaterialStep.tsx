@@ -3,14 +3,6 @@ import { ChevronLeft, ChevronRight, FlaskConical, Check } from 'lucide-react'
 import { materialsApi } from '../../../lib/api'
 import type { AnalysisState, Material } from '../../../types'
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Steel: 'text-slate-400',
-  Titanium: 'text-blue-400',
-  Aluminum: 'text-yellow-400',
-  Nickel: 'text-green-400',
-  Cobalt: 'text-purple-400',
-  Copper: 'text-orange-400',
-}
 
 interface Props {
   state: AnalysisState
@@ -86,8 +78,8 @@ export function MaterialStep({ state, update, onNext, onBack }: Props) {
                   </div>
                 )}
                 <div className="flex items-center gap-2 mb-2">
-                  <FlaskConical size={14} className={CATEGORY_COLORS[m.category] || 'text-text-muted'} />
-                  <span className={`text-xs font-medium ${CATEGORY_COLORS[m.category] || 'text-text-muted'}`}>{m.category}</span>
+                  <FlaskConical size={14} className="text-accent-green" />
+                  <span className="text-xs font-medium text-text-secondary">{m.category}</span>
                 </div>
                 <h4 className="text-text-primary font-semibold text-sm mb-0.5">{m.name}</h4>
                 {m.alloy_designation && <p className="text-text-muted text-xs mb-2">{m.alloy_designation}</p>}

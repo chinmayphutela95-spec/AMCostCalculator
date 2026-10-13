@@ -25,10 +25,6 @@ export function Dashboard() {
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <div className="hero-card">
-        {/* Decorative orbs */}
-        <div className="absolute -top-16 -right-16 w-64 h-64 bg-accent-blue/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-12 right-32 w-48 h-48 bg-accent-cyan/6 rounded-full blur-3xl pointer-events-none" />
-
         <div className="relative flex items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -67,7 +63,7 @@ export function Dashboard() {
           },
           {
             icon: FlaskConical,
-            color: 'text-accent-cyan',
+            color: 'text-accent-green',
             bg: 'bg-accent-cyan/10',
             label: 'Materials',
             value: materials.length,
@@ -107,7 +103,7 @@ export function Dashboard() {
             </div>
             <button
               onClick={() => navigate('/history')}
-              className="text-accent-blue text-xs font-semibold hover:text-accent-cyan transition-colors flex items-center gap-1"
+              className="text-accent-blue text-xs font-semibold hover:text-accent-green transition-colors flex items-center gap-1"
             >
               View all <ChevronRight size={12} />
             </button>
@@ -116,12 +112,12 @@ export function Dashboard() {
           {loading ? (
             <div className="space-y-2">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-14 rounded-xl bg-bg-secondary animate-pulse" />
+                <div key={i} className="h-14 rounded-xl bg-bg-subtle animate-pulse" />
               ))}
             </div>
           ) : recentProjects.length === 0 ? (
             <div className="text-center py-12">
-              <div className="w-12 h-12 rounded-2xl bg-bg-secondary flex items-center justify-center mx-auto mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-bg-subtle flex items-center justify-center mx-auto mb-3">
                 <FolderOpen size={22} className="text-text-muted" />
               </div>
               <p className="text-text-secondary text-sm font-medium">No analyses yet</p>
@@ -152,7 +148,7 @@ export function Dashboard() {
                     {cpp != null && (
                       <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right">
-                          <div className="text-accent-cyan font-mono font-bold text-sm">{formatCurrency(cpp, 2)}</div>
+                          <div className="text-accent-green font-mono font-bold text-sm">{formatCurrency(cpp, 2)}</div>
                           <div className="text-text-muted text-xs">/ part</div>
                         </div>
                         <ChevronRight size={14} className="text-text-muted group-hover:text-accent-blue transition-colors" />
@@ -198,12 +194,12 @@ export function Dashboard() {
             <h3 className="section-title mb-4">Platform Features</h3>
             <ul className="space-y-2.5">
               {[
-                { dot: 'bg-accent-blue',   text: 'STL / STEP file parsing' },
-                { dot: 'bg-accent-cyan',   text: '3D build plate visualization' },
-                { dot: 'bg-accent-purple', text: 'Multi-machine comparison' },
-                { dot: 'bg-accent-green',  text: 'AI-powered DfAM insights' },
-                { dot: 'bg-warning',       text: 'PDF & Excel export with charts' },
-                { dot: 'bg-danger',        text: 'Support estimation from STL' },
+                { dot: 'bg-accent-blue', text: 'STL / STEP file parsing' },
+                { dot: 'bg-accent-cyan', text: '3D build plate visualization' },
+                { dot: 'bg-accent-blue', text: 'Multi-machine comparison' },
+                { dot: 'bg-accent-cyan', text: 'AI-powered DfAM insights' },
+                { dot: 'bg-accent-blue', text: 'PDF & Excel export with charts' },
+                { dot: 'bg-accent-cyan', text: 'Support estimation from STL' },
               ].map(({ dot, text }) => (
                 <li key={text} className="flex items-center gap-2.5 text-xs text-text-secondary">
                   <span className={`w-1.5 h-1.5 rounded-full ${dot} shrink-0`} />

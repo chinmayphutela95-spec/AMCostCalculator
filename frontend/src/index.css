@@ -6,17 +6,17 @@
   * { box-sizing: border-box; }
 
   body {
-    background-color: #080b12;
-    color: #f1f5f9;
+    background-color: #ffffff;
+    color: #000000;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: #0d1117; }
-  ::-webkit-scrollbar-thumb { background: #1f2d45; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #4f8ef7; }
+  ::-webkit-scrollbar-track { background: #ffffff; }
+  ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #6400FF; }
 
   h1, h2, h3, h4 { letter-spacing: -0.02em; }
 }
@@ -26,27 +26,22 @@
   /* ── Cards ────────────────────────────────────────────────── */
   .card {
     @apply bg-bg-card border border-bg-border rounded-2xl p-5;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   .card-hover {
     @apply card transition-all duration-200 hover:border-accent-blue/40 hover:-translate-y-0.5;
   }
   .card-hover:hover {
-    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
   }
 
   /* ── Buttons ──────────────────────────────────────────────── */
   .btn-primary {
     @apply inline-flex items-center gap-2
-           bg-gradient-to-r from-accent-blue to-accent-cyan
-           hover:from-blue-500 hover:to-accent-cyan
+           bg-accent-blue hover:bg-[#5000cc]
            text-white font-semibold px-5 py-2.5 rounded-xl
            transition-all duration-200
-           disabled:opacity-40 disabled:cursor-not-allowed;
-    box-shadow: 0 0 24px rgba(79,142,247,0.20);
-  }
-  .btn-primary:disabled {
-    box-shadow: none;
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-accent-blue;
   }
   .btn-secondary {
     @apply inline-flex items-center gap-2
@@ -54,7 +49,7 @@
            hover:border-accent-blue/50 hover:bg-bg-hover
            text-text-primary font-medium px-4 py-2.5 rounded-xl
            transition-all duration-200;
-    background-color: #1a2235;
+    background-color: #ffffff;
   }
   .btn-danger {
     @apply inline-flex items-center gap-2
@@ -83,10 +78,7 @@
 
   /* ── Typography utilities ─────────────────────────────────── */
   .gradient-text {
-    @apply bg-gradient-to-r from-accent-blue to-accent-cyan bg-clip-text text-transparent;
-  }
-  .gradient-text-purple {
-    @apply bg-gradient-to-r from-accent-purple to-accent-blue bg-clip-text text-transparent;
+    @apply text-accent-blue;
   }
   .page-title {
     @apply text-3xl font-extrabold text-text-primary tracking-tight;
@@ -116,10 +108,7 @@
 
   /* ── Hero / CTA card ──────────────────────────────────────── */
   .hero-card {
-    @apply relative overflow-hidden rounded-2xl p-6
-           bg-gradient-to-br from-accent-blue/10 via-bg-card to-accent-cyan/5
-           border border-accent-blue/20;
-    box-shadow: 0 0 28px rgba(79,142,247,0.18);
+    @apply relative overflow-hidden rounded-2xl p-6 bg-bg-card border border-accent-blue/20;
   }
 }
 
@@ -128,11 +117,6 @@
 .step-enter-active { opacity: 1; transform: translateX(0); transition: opacity 200ms, transform 200ms; }
 .step-exit { opacity: 1; }
 .step-exit-active { opacity: 0; transition: opacity 150ms; }
-
-/* ── Glow effects ─────────────────────────────────────────────── */
-.glow-blue   { box-shadow: 0 0 28px rgba(79,142,247,0.18); }
-.glow-cyan   { box-shadow: 0 0 28px rgba(6,200,232,0.15); }
-.glow-purple { box-shadow: 0 0 28px rgba(155,109,255,0.18); }
 
 /* ── Number inputs ────────────────────────────────────────────── */
 input[type='number']::-webkit-inner-spin-button,

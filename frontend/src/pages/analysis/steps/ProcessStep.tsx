@@ -13,7 +13,7 @@ function Toggle({ label, checked, onChange, note }: { label: string; checked: bo
     <div className="flex items-start gap-3">
       <button
         onClick={() => onChange(!checked)}
-        className={`relative w-10 h-5 rounded-full transition-colors shrink-0 mt-0.5 ${checked ? 'bg-accent-blue' : 'bg-bg-border'}`}
+        className={`relative w-10 h-5 rounded-full transition-colors shrink-0 mt-0.5 ${checked ? 'bg-accent-blue' : 'bg-zinc-300'}`}
       >
         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </button>
@@ -118,7 +118,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-text-muted text-xs mb-0.5">Effective build rate</div>
-                  <div className="text-accent-cyan font-mono font-bold text-lg">
+                  <div className="text-accent-green font-mono font-bold text-lg">
                     {(state.materialBuildRate * state.lasersPerPart).toFixed(1)} cm³/hr
                   </div>
                   <div className="text-text-muted text-xs">{state.lasersPerPart}× speedup vs single</div>
@@ -136,7 +136,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
           // First-principles: machine has distance + speed configured
           <div className="card border-accent-cyan/20 bg-accent-cyan/5">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-accent-cyan text-xs font-semibold uppercase tracking-wide">First-Principles Calculation Active</span>
+              <span className="text-accent-green text-xs font-semibold uppercase tracking-wide">First-Principles Calculation Active</span>
             </div>
             <div className="grid grid-cols-3 gap-4 text-xs">
               <div>
@@ -149,7 +149,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
               </div>
               <div>
                 <div className="text-text-muted">Time per layer</div>
-                <div className="text-accent-cyan font-mono font-medium">
+                <div className="text-accent-green font-mono font-medium">
                   {((m.recoating_distance_mm / m.recoating_speed_mm_s)).toFixed(1)} s
                 </div>
               </div>
@@ -170,7 +170,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
               {Math.round((state.recoatingEfficiency ?? 0.75) * 100) !== 75 && (
                 <button
                   onClick={() => update({ recoatingEfficiency: 0.75 })}
-                  className="ml-3 shrink-0 text-xs text-accent-cyan border border-accent-cyan/30 rounded px-2 py-0.5 hover:bg-accent-cyan/10 transition-colors"
+                  className="ml-3 shrink-0 text-xs text-accent-green border border-accent-cyan/30 rounded px-2 py-0.5 hover:bg-accent-cyan/10 transition-colors"
                 >
                   Reset to 75%
                 </button>
@@ -181,7 +181,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
                 <div className="flex items-center justify-between mb-1">
                   <label className="label mb-0">Recoating Efficiency</label>
                   <span className="text-xs text-text-muted">
-                    Recommended: <span className="text-accent-cyan font-medium">75%</span>
+                    Recommended: <span className="text-accent-green font-medium">75%</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-3 mt-1">
@@ -191,7 +191,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
                     onChange={e => update({ recoatingEfficiency: +e.target.value / 100 })}
                     className="flex-1"
                   />
-                  <span className="text-accent-cyan font-mono font-bold text-lg w-12 text-center">
+                  <span className="text-accent-green font-mono font-bold text-lg w-12 text-center">
                     {Math.round((state.recoatingEfficiency ?? 0.75) * 100)}%
                   </span>
                 </div>
@@ -202,7 +202,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
               </div>
               <div className="text-right shrink-0">
                 <div className="text-text-muted text-xs mb-0.5">Recoating adds</div>
-                <div className="text-accent-cyan font-mono font-bold text-lg">
+                <div className="text-accent-green font-mono font-bold text-lg">
                   {(state.recoatingEfficiency ?? 0.75) < 1.0
                     ? `+${((1 / (state.recoatingEfficiency ?? 0.75) - 1) * 100).toFixed(0)}%`
                     : 'None'}
@@ -343,7 +343,7 @@ export function ProcessStep({ state, update, onNext, onBack }: Props) {
                 </div>
                 <div className="text-right">
                   <div className="text-text-muted text-xs mb-0.5">{state.partsPerBuildOverride ? 'Overridden' : 'Auto'}</div>
-                  <div className={`font-mono font-bold text-2xl ${state.partsPerBuildOverride ? 'text-accent-purple' : 'text-accent-cyan'}`}>
+                  <div className={`font-mono font-bold text-2xl ${state.partsPerBuildOverride ? 'text-accent-purple' : 'text-accent-green'}`}>
                     {effective}
                   </div>
                   {state.partsPerBuildOverride && (

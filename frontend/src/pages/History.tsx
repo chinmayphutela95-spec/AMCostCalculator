@@ -98,7 +98,7 @@ export function HistoryPage() {
                     <div className="flex items-center gap-3 ml-4">
                       {cpp != null && (
                         <div className="text-right">
-                          <div className="text-accent-cyan font-mono font-bold">{formatCurrency(cpp, 2)}</div>
+                          <div className="text-accent-green font-mono font-bold">{formatCurrency(cpp, 2)}</div>
                           <div className="text-text-muted text-xs">per part</div>
                         </div>
                       )}
@@ -130,7 +130,7 @@ export function HistoryPage() {
                   <button onClick={() => setSelected(null)} className="text-text-muted hover:text-text-primary"><X size={16} /></button>
                 </div>
                 <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-text-muted">Cost/Part</span><span className="text-accent-cyan font-mono font-bold">{results.cost_per_part != null ? formatCurrency(results.cost_per_part, 2) : '–'}</span></div>
+                  <div className="flex justify-between"><span className="text-text-muted">Cost/Part</span><span className="text-accent-green font-mono font-bold">{results.cost_per_part != null ? formatCurrency(results.cost_per_part, 2) : '–'}</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Total Cost</span><span className="text-text-primary font-mono">{results.total_cost != null ? formatCurrency(results.total_cost) : '–'}</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Production Run</span><span className="text-text-primary">{inputs.production_run ?? '–'} parts</span></div>
                   <div className="flex justify-between"><span className="text-text-muted">Parts/Build</span><span className="text-text-primary">{results.parts_per_build ?? '–'}</span></div>

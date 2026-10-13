@@ -5,7 +5,7 @@ import {
   LineChart, Line, Legend, PieChart, Pie, Cell, ReferenceLine
 } from 'recharts'
 import { analysisApi, aiApi, projectsApi, exportApi } from '../../../lib/api'
-import { formatCurrency, formatNumber, CATEGORY_COLORS } from '../../../lib/utils'
+import { formatCurrency, formatNumber, CATEGORY_COLORS, CHART } from '../../../lib/utils'
 import type { AnalysisState } from '../../../types'
 
 interface Props {
@@ -13,12 +13,6 @@ interface Props {
   update: (p: Partial<AnalysisState>) => void
   onBack: () => void
   onReset: () => void
-}
-
-const DARK_TOOLTIP = {
-  contentStyle: { backgroundColor: '#141928', border: '1px solid #1e2a45', borderRadius: 8 },
-  labelStyle: { color: '#e2e8f0' },
-  itemStyle: { color: '#94a3b8' },
 }
 
 type CompareEntry = { machineName: string; costPerPart: number; totalCost: number; partsPerBuild: number; numBuilds: number }
@@ -274,10 +268,10 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
       {/* Top summary */}
       <div className="grid grid-cols-4 gap-4">
         <div className="stat-card col-span-1 border-accent-cyan/30 bg-accent-cyan/5">
-          <div className="stat-label text-accent-cyan">
+          <div className="stat-label text-accent-green">
             {state.partsPerLayout > 1 ? 'Cost per Main Part' : 'Cost per Part'}
           </div>
-          <div className="stat-value text-accent-cyan font-mono">
+          <div className="stat-value text-accent-green font-mono">
             {formatCurrency(r.cost_per_part / (state.partsPerLayout || 1), 2)}
           </div>
           <div className="text-text-muted text-xs mt-1">
@@ -310,13 +304,11 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
           <h3 className="section-title">Cost Breakdown</h3>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={categories} margin={{ left: 0, right: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2a45" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 10 }} angle={-30} textAnchor="end" height={50} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip {...DARK_TOOLTIP} formatter={(v: number) => [formatCurrency(v), 'Cost']} />
-              <Bar dataKey="cost" radius={[3, 3, 0, 0]}>
-                {categories.map((c) => <Cell key={c.key} fill={CATEGORY_COLORS[c.key] || '#64748b'} />)}
-              </Bar>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" tick={{ fill: CHART.tick, fontSize: 10 }} angle={-30} textAnchor="end" height={50} />
+              <YAxis tick={{ fill: CHART.tick, fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip {...CHART.tooltip} formatter={(v: number) => [formatCurrency(v), 'Cost']} />
+              <Bar dataKey="cost" fill="#6400FF" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -327,10 +319,10 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
           <div className="flex items-center gap-4">
             <ResponsiveContainer width="50%" height={200}>
               <PieChart>
-                <Pie data={categories} dataKey="cost" cx="50%" cy="50%" outerRadius={80} strokeWidth={0}>
-                  {categories.map((c) => <Cell key={c.key} fill={CATEGORY_COLORS[c.key] || '#64748b'} />)}
+                <Pie data={categories} dataKey="cost" cx="50%" cy="50%" outerRadius={80} stroke="#ffffff" strokeWidth={2}>
+                  {categories.map((c) => <Cell key={c.key} fill={CATEGORY_COLORS[c.key] || CHART.tick} />)}
                 </Pie>
-                <Tooltip {...DARK_TOOLTIP} formatter={(v: number) => [formatCurrency(v), '']} />
+                <Tooltip {...CHART.tooltip} formatter={(v: number) => [formatCurrency(v), '']} />
               </PieChart>
             </ResponsiveContainer>
             <div className="flex-1 space-y-1.5">
@@ -354,15 +346,15 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
           <h3 className="section-title">Cost per Part vs Production Quantity</h3>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={state.quantityCurve} margin={{ left: 0, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2a45" />
-              <XAxis dataKey="quantity" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${v / 1000}k` : v} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={v => `$${v.toFixed(0)}`} />
-              <Tooltip {...DARK_TOOLTIP} formatter={(v: number, name: string) => [formatCurrency(v, 2), name]} />
-              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
-              <ReferenceLine x={state.productionRun} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: 'Current', fill: '#f59e0b', fontSize: 10 }} />
-              <Line type="monotone" dataKey="cost_per_part" name="Total $/part" stroke="#3b82f6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="material_cost" name="Material $/part" stroke="#06b6d4" strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
-              <Line type="monotone" dataKey="machine_cost" name="Machine $/part" stroke="#8b5cf6" strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="quantity" tick={{ fill: CHART.tick, fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${v / 1000}k` : v} />
+              <YAxis tick={{ fill: CHART.tick, fontSize: 11 }} tickFormatter={v => `$${v.toFixed(0)}`} />
+              <Tooltip {...CHART.tooltip} formatter={(v: number, name: string) => [formatCurrency(v, 2), name]} />
+              <Legend wrapperStyle={{ color: CHART.legend, fontSize: 12 }} />
+              <ReferenceLine x={state.productionRun} stroke={CHART.tick} strokeDasharray="4 4" label={{ value: 'Current', fill: CHART.tick, fontSize: 10 }} />
+              <Line type="monotone" dataKey="cost_per_part" name="Total $/part" stroke="#000000" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="material_cost" name="Material $/part" stroke={CATEGORY_COLORS.material} strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
+              <Line type="monotone" dataKey="machine_cost" name="Machine $/part" stroke={CATEGORY_COLORS.machine} strokeWidth={1.5} dot={false} strokeDasharray="5 5" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -408,7 +400,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
                         <span className="badge bg-accent-blue/20 text-accent-blue text-xs">Selected</span>
                       </div>
                     </td>
-                    <td className="py-2.5 pr-4 text-right text-accent-cyan font-mono font-semibold">{formatCurrency(r.cost_per_part, 2)}</td>
+                    <td className="py-2.5 pr-4 text-right text-accent-green font-mono font-semibold">{formatCurrency(r.cost_per_part, 2)}</td>
                     <td className="py-2.5 pr-4 text-right text-text-primary font-mono">{formatCurrency(r.total_cost)}</td>
                     <td className="py-2.5 pr-4 text-right text-text-secondary">{r.parts_per_build}</td>
                     <td className="py-2.5 text-right text-text-secondary">{r.num_builds}</td>
@@ -474,7 +466,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
                 <td className="py-2 text-right text-text-secondary font-mono">{formatCurrency(c.cost / state.productionRun, 2)}</td>
                 <td className="py-2 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <div className="w-20 h-1.5 bg-bg-secondary rounded-full overflow-hidden">
+                    <div className="w-20 h-1.5 bg-bg-subtle rounded-full overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${c.cost / total * 100}%`, background: CATEGORY_COLORS[c.key] }} />
                     </div>
                     <span className="text-text-muted text-xs w-10 text-right">{(c.cost / total * 100).toFixed(1)}%</span>
@@ -484,8 +476,8 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
             ))}
             <tr className="border-t-2 border-accent-blue/30 font-semibold">
               <td className="py-2 text-text-primary">TOTAL</td>
-              <td className="py-2 text-right text-accent-cyan font-mono">{formatCurrency(total)}</td>
-              <td className="py-2 text-right text-accent-cyan font-mono">{formatCurrency(r.cost_per_part, 2)}</td>
+              <td className="py-2 text-right text-accent-green font-mono">{formatCurrency(total)}</td>
+              <td className="py-2 text-right text-accent-green font-mono">{formatCurrency(r.cost_per_part, 2)}</td>
               <td className="py-2 text-right text-text-muted">100%</td>
             </tr>
           </tbody>
@@ -571,7 +563,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
                   <div className="space-y-2">
                     {ins.cost_reduction_opportunities.map((o: any, i: number) => (
                       <div key={i} className="flex gap-3 p-3 rounded-lg bg-bg-secondary border border-bg-border text-sm">
-                        <span className="badge bg-accent-cyan/10 text-accent-cyan shrink-0">{o.area}</span>
+                        <span className="badge bg-accent-cyan/10 text-accent-green shrink-0">{o.area}</span>
                         <div className="flex-1">
                           <span className="text-text-secondary">{o.suggestion}</span>
                           {o.potential_savings && <span className="text-success ml-2 text-xs">· {o.potential_savings}</span>}

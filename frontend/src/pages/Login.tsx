@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Zap, LogIn, Loader2, AlertCircle } from 'lucide-react'
+import { LogIn, Loader2, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import tiiLogo from '../assets/tii-logo.png'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -21,10 +22,8 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-bg-primary flex items-center justify-center px-4">
       <form onSubmit={signIn} className="card w-full max-w-sm space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-blue to-accent-cyan flex items-center justify-center shadow-glow-blue shrink-0">
-            <Zap size={18} className="text-white" strokeWidth={2.5} />
-          </div>
+        <div className="space-y-4">
+          <img src={tiiLogo} alt="Technology Innovation Institute" className="h-16 w-auto" />
           <div className="leading-tight">
             <div className="text-text-primary font-bold">Metal AM Cost Analyzer</div>
             <div className="text-text-muted text-xs">Sign in to continue</div>

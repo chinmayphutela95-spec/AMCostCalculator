@@ -123,7 +123,7 @@ export function MachinesPage() {
                   <td className="px-4 py-3">
                     {canEdit && (
                       <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
+                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-green p-1.5 rounded transition-colors"><Copy size={13} /></button>
                         <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
                         <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
                       </div>
@@ -181,7 +181,7 @@ export function MachinesPage() {
                   <NumField label="Build Height (cm)" value={editing.build_height} onChange={(v) => set('build_height', v)} />
                   <div>
                     <label className="label">Build Area (cm²)</label>
-                    <input className="input-field bg-bg-primary text-text-muted cursor-not-allowed" value={(editing.build_area || 0).toFixed(2)} readOnly />
+                    <input className="input-field bg-bg-subtle text-text-muted cursor-not-allowed" value={(editing.build_area || 0).toFixed(2)} readOnly />
                     <p className="text-text-muted text-xs mt-0.5">Auto-calculated</p>
                   </div>
                   <NumField label="Number of Lasers" value={editing.num_lasers ?? 1} onChange={(v) => set('num_lasers', Math.max(1, Math.round(v)))} note="Available laser beams (e.g. 1, 2, 4)" />
