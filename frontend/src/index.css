@@ -72,6 +72,12 @@
            focus:outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/10
            transition-all duration-150 text-sm placeholder:text-text-muted;
   }
+  /* Read-only forms (disabled fieldset): locked, but values stay fully legible */
+  .input-field:disabled {
+    @apply bg-bg-subtle cursor-default;
+    opacity: 1;
+    -webkit-text-fill-color: currentColor;
+  }
   .label {
     @apply text-text-muted text-xs font-semibold uppercase tracking-widest mb-1.5 block;
   }

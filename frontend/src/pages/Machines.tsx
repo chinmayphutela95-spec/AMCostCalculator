@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, Cpu, AlertCircle, Copy, Lock } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Cpu, AlertCircle, Copy, Lock, Eye } from 'lucide-react'
 import { machinesApi, apiErrorMessage } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { formatCurrency } from '../lib/utils'
@@ -45,14 +45,19 @@ export function MachinesPage() {
   const [editing, setEditing] = useState<Partial<Machine>>(DEFAULT_MACHINE)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [viewOnly, setViewOnly] = useState(false)   // same form, all fields locked
   const canEdit = !!useAuth().me?.is_admin   // the library is admin-managed
 
   const load = () => machinesApi.list().then(setMachines).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setEditing({ ...DEFAULT_MACHINE }); setEditingId(null); setShowModal(true) }
-  const openEdit = (m: Machine) => { setEditing({ ...m }); setEditingId(m.id); setShowModal(true) }
-  const openDuplicate = (m: Machine) => { setEditing({ ...m, name: m.name + ' (Copy)', is_custom: true }); setEditingId(null); setShowModal(true) }
+  const open = (m: Partial<Machine>, id: number | null, readOnly = false) => {
+    setEditing(m); setEditingId(id); setViewOnly(readOnly); setShowModal(true)
+  }
+  const openAdd = () => open({ ...DEFAULT_MACHINE }, null)
+  const openEdit = (m: Machine) => open({ ...m }, m.id)
+  const openDuplicate = (m: Machine) => open({ ...m, name: m.name + ' (Copy)', is_custom: true }, null)
+  const openView = (m: Machine) => open({ ...m }, m.id, true)
 
   const save = async () => {
     setSaving(true)
@@ -83,7 +88,7 @@ export function MachinesPage() {
         {canEdit ? (
           <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Machine</button>
         ) : (
-          <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · managed by admins</span>
+          <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · click a machine to see its full specifications</span>
         )}
       </div>
 
@@ -99,7 +104,11 @@ export function MachinesPage() {
             </thead>
             <tbody>
               {machines.map((m, i) => (
-                <tr key={m.id} className={`border-b border-bg-border hover:bg-bg-hover transition-colors ${i % 2 === 1 ? 'bg-bg-secondary/30' : ''}`}>
+                <tr
+                  key={m.id}
+                  onClick={canEdit ? undefined : () => openView(m)}
+                  className={`border-b border-bg-border hover:bg-bg-hover transition-colors ${canEdit ? '' : 'cursor-pointer'} ${i % 2 === 1 ? 'bg-bg-secondary/30' : ''}`}
+                >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <Cpu size={14} className="text-accent-blue shrink-0" />
@@ -121,11 +130,15 @@ export function MachinesPage() {
                   <td className="px-4 py-3 text-right text-text-primary font-mono text-xs">{formatCurrency(m.machine_cost)}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono text-xs">${m.inert_gas_cost}/hr</td>
                   <td className="px-4 py-3">
-                    {canEdit && (
+                    {canEdit ? (
                       <div className="flex items-center gap-1 justify-end">
                         <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-green p-1.5 rounded transition-colors"><Copy size={13} /></button>
                         <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
                         <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
+                        <button title="View details" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Eye size={14} /></button>
                       </div>
                     )}
                   </td>
@@ -140,10 +153,16 @@ export function MachinesPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="bg-bg-card border border-bg-border rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-bg-border sticky top-0 bg-bg-card z-10">
-              <h2 className="text-text-primary font-semibold">{editingId ? 'Edit Machine' : 'Add Machine'}</h2>
+              <div>
+                <h2 className="text-text-primary font-semibold">{viewOnly ? 'Machine Details' : editingId ? 'Edit Machine' : 'Add Machine'}</h2>
+                {viewOnly && (
+                  <p className="text-text-muted text-xs mt-0.5 flex items-center gap-1"><Lock size={11} /> Read-only — only admins can change machines</p>
+                )}
+              </div>
               <button onClick={() => setShowModal(false)} className="text-text-muted hover:text-text-primary"><X size={18} /></button>
             </div>
-            <div className="px-6 py-5 space-y-6">
+            {/* A disabled fieldset locks every input, select and textarea inside it */}
+            <fieldset disabled={viewOnly} className="px-6 py-5 space-y-6 min-w-0">
               {/* Basic */}
               <div>
                 <h3 className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-3 border-b border-bg-border pb-2">Basic Info</h3>
@@ -290,12 +309,18 @@ export function MachinesPage() {
                   <p className="text-warning text-xs">{editing.notes}</p>
                 </div>
               )}
-            </div>
+            </fieldset>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-bg-border sticky bottom-0 bg-bg-card">
-              <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={save} disabled={saving || !editing.name} className="btn-primary">
-                {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Machine'}
-              </button>
+              {viewOnly ? (
+                <button onClick={() => setShowModal(false)} className="btn-secondary">Close</button>
+              ) : (
+                <>
+                  <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
+                  <button onClick={save} disabled={saving || !editing.name} className="btn-primary">
+                    {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Machine'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

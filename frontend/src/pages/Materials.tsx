@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, FlaskConical, Copy, Lock } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, FlaskConical, Copy, Lock, Eye } from 'lucide-react'
 import { materialsApi, apiErrorMessage } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Material } from '../types'
@@ -42,14 +42,19 @@ export function MaterialsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('')
+  const [viewOnly, setViewOnly] = useState(false)   // same form, all fields locked
   const canEdit = !!useAuth().me?.is_admin   // the library is admin-managed
 
   const load = () => materialsApi.list().then(setMaterials).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setEditing({ ...DEFAULT }); setEditingId(null); setShowModal(true) }
-  const openEdit = (m: Material) => { setEditing({ ...m }); setEditingId(m.id); setShowModal(true) }
-  const openDuplicate = (m: Material) => { setEditing({ ...m, name: m.name + ' (Copy)', is_custom: true }); setEditingId(null); setShowModal(true) }
+  const open = (m: Partial<Material>, id: number | null, readOnly = false) => {
+    setEditing(m); setEditingId(id); setViewOnly(readOnly); setShowModal(true)
+  }
+  const openAdd = () => open({ ...DEFAULT }, null)
+  const openEdit = (m: Material) => open({ ...m }, m.id)
+  const openDuplicate = (m: Material) => open({ ...m, name: m.name + ' (Copy)', is_custom: true }, null)
+  const openView = (m: Material) => open({ ...m }, m.id, true)
 
   const save = async () => {
     setSaving(true)
@@ -90,7 +95,7 @@ export function MaterialsPage() {
           {canEdit ? (
             <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Material</button>
           ) : (
-            <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · managed by admins</span>
+            <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · click a material to see its full specifications</span>
           )}
         </div>
       </div>
@@ -119,7 +124,11 @@ export function MaterialsPage() {
             </thead>
             <tbody>
               {filtered.map((m, i) => (
-                <tr key={m.id} className={`border-b border-bg-border hover:bg-bg-hover transition-colors ${i % 2 === 1 ? 'bg-bg-secondary/30' : ''}`}>
+                <tr
+                  key={m.id}
+                  onClick={canEdit ? undefined : () => openView(m)}
+                  className={`border-b border-bg-border hover:bg-bg-hover transition-colors ${canEdit ? '' : 'cursor-pointer'} ${i % 2 === 1 ? 'bg-bg-secondary/30' : ''}`}
+                >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <FlaskConical size={13} className="text-accent-green shrink-0" />
@@ -142,11 +151,15 @@ export function MaterialsPage() {
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.yield_strength ?? '–'}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.tensile_strength ?? '–'}</td>
                   <td className="px-4 py-3">
-                    {canEdit && (
+                    {canEdit ? (
                       <div className="flex items-center gap-1 justify-end">
                         <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-green p-1.5 rounded transition-colors"><Copy size={13} /></button>
                         <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
                         <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
+                        <button title="View details" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Eye size={14} /></button>
                       </div>
                     )}
                   </td>
@@ -161,10 +174,16 @@ export function MaterialsPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="bg-bg-card border border-bg-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-bg-border sticky top-0 bg-bg-card z-10">
-              <h2 className="text-text-primary font-semibold">{editingId ? 'Edit Material' : 'Add Material'}</h2>
+              <div>
+                <h2 className="text-text-primary font-semibold">{viewOnly ? 'Material Details' : editingId ? 'Edit Material' : 'Add Material'}</h2>
+                {viewOnly && (
+                  <p className="text-text-muted text-xs mt-0.5 flex items-center gap-1"><Lock size={11} /> Read-only — only admins can change materials</p>
+                )}
+              </div>
               <button onClick={() => setShowModal(false)}><X size={18} className="text-text-muted" /></button>
             </div>
-            <div className="px-6 py-5 space-y-5">
+            {/* A disabled fieldset locks every input, select and textarea inside it */}
+            <fieldset disabled={viewOnly} className="px-6 py-5 space-y-5 min-w-0">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Material Name *" value={editing.name} onChange={(v: string) => set('name', v)} placeholder="e.g. 316L Stainless Steel" />
                 <Field label="Alloy Designation" value={editing.alloy_designation} onChange={(v: string) => set('alloy_designation', v)} placeholder="e.g. 1.4404" />
@@ -206,12 +225,18 @@ export function MaterialsPage() {
                 <label className="label">Notes</label>
                 <textarea className="input-field h-20 resize-none" value={editing.notes || ''} onChange={e => set('notes', e.target.value)} />
               </div>
-            </div>
+            </fieldset>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-bg-border sticky bottom-0 bg-bg-card">
-              <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={save} disabled={saving || !editing.name} className="btn-primary">
-                {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Material'}
-              </button>
+              {viewOnly ? (
+                <button onClick={() => setShowModal(false)} className="btn-secondary">Close</button>
+              ) : (
+                <>
+                  <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
+                  <button onClick={save} disabled={saving || !editing.name} className="btn-primary">
+                    {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Material'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
