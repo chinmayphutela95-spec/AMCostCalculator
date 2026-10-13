@@ -271,11 +271,19 @@ def calculate_cost(inputs: CostInputs) -> CostBreakdown:
 
     # --- Cost Category 3: Machine Usage ---
     total_upfront_cost = inputs.machine_cost * (1 + inputs.infrastructure_pct)
-    annual_depreciation = (
-        inputs.cost_of_capital
-        * total_upfront_cost
-        / (1 - (1 + inputs.cost_of_capital) ** (-inputs.machine_lifetime))
-    )
+    # annual_depreciation = (
+    #     inputs.cost_of_capital
+    #     * total_upfront_cost
+    #     / (1 - (1 + inputs.cost_of_capital) ** (-inputs.machine_lifetime))
+    # )
+    if inputs.cost_of_capital == 0:
+    # Straight-line depreciation when cost of capital is zero
+        annual_depreciation = total_upfront_cost / inputs.machine_lifetime
+    else:
+    # Capital recovery factor formula (original)
+        annual_depreciation = (
+        inputs.cost_of_capital * total_upfront_cost
+        / (1 - (1 + inputs.cost_of_capital) ** (-inputs.machine_lifetime)))
     annual_maintenance = inputs.maintenance_pct * inputs.machine_cost
     annual_machine_cost = annual_depreciation + annual_maintenance
 
