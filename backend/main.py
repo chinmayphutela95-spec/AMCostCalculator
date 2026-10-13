@@ -1,27 +1,25 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from pydantic import BaseModel
 from typing import Optional, List
 import os
 import json
-import uuid
-import shutil
-from datetime import datetime
+import tempfile
+
+# matplotlib (used by exports) needs a writable config dir; only /tmp is writable on Vercel
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
 
 from sqlalchemy import text
-from database import engine, get_db, Base
+from database import engine, get_db, Base, IS_SQLITE
 import models
+from auth import AUTH_ENABLED, CurrentUser, current_user, require_admin
 from cost_calculator import CostInputs, calculate_cost, calculate_quantity_curve
-from geometry_parser import parse_stl, compute_mass
 from ai_insights import get_ai_insights
 from export_service import export_to_excel, export_to_pdf
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
-
-# ── Schema migrations (adds new columns to existing DBs) ──────────────────────
+# ── Local SQLite: create tables and add new columns to existing DBs ───────────
+# (The Supabase schema is managed by supabase/schema.sql instead.)
 def _run_migrations():
     stmts = [
         "ALTER TABLE machines ADD COLUMN num_lasers INTEGER DEFAULT 1",
@@ -29,6 +27,9 @@ def _run_migrations():
         "ALTER TABLE machines ADD COLUMN recoating_speed_mm_s REAL",
         "ALTER TABLE materials ADD COLUMN layer_thickness_um REAL DEFAULT 40.0",
         "ALTER TABLE materials ADD COLUMN build_rate_cm3_hr REAL DEFAULT 10.0",
+        "ALTER TABLE projects ADD COLUMN part_snapshot TEXT",
+        "ALTER TABLE projects ADD COLUMN created_by CHAR(32)",
+        "ALTER TABLE projects ADD COLUMN created_by_email VARCHAR",
     ]
     with engine.connect() as conn:
         for stmt in stmts:
@@ -38,9 +39,12 @@ def _run_migrations():
             except Exception:
                 pass  # column already exists
 
-_run_migrations()
+if IS_SQLITE:
+    Base.metadata.create_all(bind=engine)
+    _run_migrations()
 
-app = FastAPI(title="Metal AM Cost Analyzer", version="1.0.0")
+# Every route requires a signed-in user (see auth.py)
+app = FastAPI(title="Metal AM Cost Analyzer", version="1.0.0", dependencies=[Depends(current_user)])
 
 # CORS for local frontend dev
 app.add_middleware(
@@ -54,12 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-EXPORT_DIR = os.path.join(os.path.dirname(__file__), "exports")
-os.makedirs(EXPORT_DIR, exist_ok=True)
 
 
 # ============================================================
@@ -180,6 +178,7 @@ class ProjectSave(BaseModel):
     inputs_json: str = "{}"
     results_json: str = "{}"
     ai_insights_json: str = "{}"
+    part_snapshot: Optional[str] = None   # data:image/… URL captured from the 3D viewer
 
 
 class CompareRequest(BaseModel):
@@ -318,7 +317,7 @@ def get_machine(machine_id: int, db: Session = Depends(get_db)):
     return m
 
 
-@app.post("/api/machines")
+@app.post("/api/machines", dependencies=[Depends(require_admin)])
 def create_machine(machine: MachineCreate, db: Session = Depends(get_db)):
     db_machine = models.Machine(**machine.dict(), is_custom=True)
     db.add(db_machine)
@@ -327,7 +326,7 @@ def create_machine(machine: MachineCreate, db: Session = Depends(get_db)):
     return db_machine
 
 
-@app.put("/api/machines/{machine_id}")
+@app.put("/api/machines/{machine_id}", dependencies=[Depends(require_admin)])
 def update_machine(machine_id: int, machine: MachineCreate, db: Session = Depends(get_db)):
     db_machine = db.query(models.Machine).filter(models.Machine.id == machine_id).first()
     if not db_machine:
@@ -339,7 +338,7 @@ def update_machine(machine_id: int, machine: MachineCreate, db: Session = Depend
     return db_machine
 
 
-@app.delete("/api/machines/{machine_id}")
+@app.delete("/api/machines/{machine_id}", dependencies=[Depends(require_admin)])
 def delete_machine(machine_id: int, db: Session = Depends(get_db)):
     db_machine = db.query(models.Machine).filter(models.Machine.id == machine_id).first()
     if not db_machine:
@@ -366,7 +365,7 @@ def get_material(material_id: int, db: Session = Depends(get_db)):
     return m
 
 
-@app.post("/api/materials")
+@app.post("/api/materials", dependencies=[Depends(require_admin)])
 def create_material(material: MaterialCreate, db: Session = Depends(get_db)):
     db_material = models.Material(**material.dict(), is_custom=True)
     db.add(db_material)
@@ -375,7 +374,7 @@ def create_material(material: MaterialCreate, db: Session = Depends(get_db)):
     return db_material
 
 
-@app.put("/api/materials/{material_id}")
+@app.put("/api/materials/{material_id}", dependencies=[Depends(require_admin)])
 def update_material(material_id: int, material: MaterialCreate, db: Session = Depends(get_db)):
     db_material = db.query(models.Material).filter(models.Material.id == material_id).first()
     if not db_material:
@@ -387,7 +386,7 @@ def update_material(material_id: int, material: MaterialCreate, db: Session = De
     return db_material
 
 
-@app.delete("/api/materials/{material_id}")
+@app.delete("/api/materials/{material_id}", dependencies=[Depends(require_admin)])
 def delete_material(material_id: int, db: Session = Depends(get_db)):
     db_material = db.query(models.Material).filter(models.Material.id == material_id).first()
     if not db_material:
@@ -398,48 +397,21 @@ def delete_material(material_id: int, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# Geometry / STL Upload
+# Current user
 # ============================================================
+# STL geometry is analysed in the browser (frontend/src/lib/geometry), so part
+# files never leave the user's machine — and no upload size limit applies.
 
-@app.post("/api/geometry/parse")
-async def parse_geometry(
-    file: UploadFile = File(...),
-    build_direction: str = Form(default="z"),
-    overhang_angle: float = Form(default=45.0),
-    fill_density: float = Form(default=0.3),
-):
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in ['.stl', '.step', '.stp', '.obj']:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file format. Use STL, STEP, or OBJ."
-        )
-
-    file_id = str(uuid.uuid4())
-    save_path = os.path.join(UPLOAD_DIR, f"{file_id}{file_ext}")
-
-    with open(save_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-
-    result = parse_stl(save_path, build_direction, overhang_angle, fill_density)
-    result["file_id"] = file_id
-    result["file_name"] = file.filename
-    result["file_path"] = save_path
-
-    return result
-
-
-@app.post("/api/geometry/reanalyze")
-async def reanalyze_geometry(
-    file_path: str = Form(...),
-    build_direction: str = Form(default="z"),
-    overhang_angle: float = Form(default=45.0),
-    fill_density: float = Form(default=0.3),
-):
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found. Please re-upload the STL.")
-    return parse_stl(file_path, build_direction, overhang_angle, fill_density)
+@app.get("/api/me")
+def me(user: CurrentUser = Depends(current_user)):
+    return {
+        "id": user.id,
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "auth_enabled": AUTH_ENABLED,
+        "ai_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "database": "sqlite" if IS_SQLITE else "postgres",
+    }
 
 
 # ============================================================
@@ -552,25 +524,46 @@ def compare_machines(req: CompareRequest, db: Session = Depends(get_db)):
 # Projects Routes
 # ============================================================
 
+# Projects are shared with the whole team; the list carries only what the list views
+# show, so it stays small as the team's history grows (full record: GET /api/projects/{id}).
+_PROJECT_LIST_FIELDS = (
+    "id", "name", "description", "created_at", "updated_at", "part_file_name",
+    "results_json", "created_by", "created_by_email",
+)
+
+_MAX_SNAPSHOT_CHARS = 3_000_000
+
+
 @app.get("/api/projects")
 def list_projects(db: Session = Depends(get_db)):
-    return db.query(models.Project).order_by(models.Project.created_at.desc()).all()
+    projects = (
+        db.query(models.Project)
+        .options(load_only(*(getattr(models.Project, f) for f in _PROJECT_LIST_FIELDS)))
+        .order_by(models.Project.created_at.desc())
+        .all()
+    )
+    return [{f: getattr(p, f) for f in _PROJECT_LIST_FIELDS} for p in projects]
 
 
 @app.post("/api/projects")
-def save_project(project: ProjectSave, db: Session = Depends(get_db)):
+def save_project(project: ProjectSave, db: Session = Depends(get_db), user: CurrentUser = Depends(current_user)):
+    snapshot = project.part_snapshot
+    if snapshot and (not snapshot.startswith("data:image/") or len(snapshot) > _MAX_SNAPSHOT_CHARS):
+        snapshot = None
     db_project = models.Project(
         name=project.name,
         description=project.description,
         part_file_name=project.part_file_name,
         inputs_json=project.inputs_json,
         results_json=project.results_json,
-        ai_insights_json=project.ai_insights_json
+        ai_insights_json=project.ai_insights_json,
+        part_snapshot=snapshot,
+        created_by=user.id,
+        created_by_email=user.email if AUTH_ENABLED else None,
     )
     db.add(db_project)
     db.commit()
-    db.refresh(db_project)
-    return db_project
+    return {f: getattr(db_project, f) for f in _PROJECT_LIST_FIELDS}
 
 
 @app.get("/api/projects/{project_id}")
@@ -582,10 +575,12 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/projects/{project_id}")
-def delete_project(project_id: int, db: Session = Depends(get_db)):
+def delete_project(project_id: int, db: Session = Depends(get_db), user: CurrentUser = Depends(current_user)):
     p = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not (user.is_admin or (p.created_by and p.created_by == user.id)):
+        raise HTTPException(status_code=403, detail="Only the project's creator or an admin can delete it.")
     db.delete(p)
     db.commit()
     return {"ok": True}
@@ -602,34 +597,31 @@ class AIInsightsRequest(BaseModel):
     machine_name: str
 
 
-@app.post("/api/ai/insights")
-def ai_insights_endpoint(req: AIInsightsRequest, db: Session = Depends(get_db)):
-    setting = db.query(models.Settings).filter(models.Settings.key == "claude_api_key").first()
-    api_key = setting.value if setting else None
-
-    result = get_ai_insights(
+def _ai_insights(req: AIInsightsRequest) -> dict:
+    # Key lives server-side only (Vercel env var / backend/.env) — never sent to browsers
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {
+            "error": "AI insights aren't configured on this server. Ask an admin to set ANTHROPIC_API_KEY.",
+            "insights": None,
+        }
+    return get_ai_insights(
         part_info=req.part_info,
         material_name=req.material_name,
         machine_name=req.machine_name,
         cost_breakdown=req.cost_breakdown,
         api_key=api_key
     )
-    return result
+
+
+@app.post("/api/ai/insights")
+def ai_insights_endpoint(req: AIInsightsRequest):
+    return _ai_insights(req)
 
 
 @app.post("/api/ai/analyze")
-def ai_analyze(req: AIInsightsRequest, db: Session = Depends(get_db)):
-    setting = db.query(models.Settings).filter(models.Settings.key == "claude_api_key").first()
-    api_key = setting.value if setting else None
-
-    result = get_ai_insights(
-        part_info=req.part_info,
-        material_name=req.material_name,
-        machine_name=req.machine_name,
-        cost_breakdown=req.cost_breakdown,
-        api_key=api_key
-    )
-    return result
+def ai_analyze(req: AIInsightsRequest):
+    return _ai_insights(req)
 
 
 # ============================================================
@@ -645,22 +637,28 @@ class ExportRequest(BaseModel):
 
 
 def _do_export(project_name: str, inputs: dict, results: dict, fmt: str, quantity_curve=None):
-    from fastapi.responses import FileResponse
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in project_name)
-
     if fmt == "pdf":
-        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.pdf")
-        export_to_pdf(project_name, inputs, results, output_path, quantity_curve=quantity_curve)
-        return FileResponse(output_path, media_type="application/pdf", filename=f"{safe_name}.pdf")
+        ext, media_type, export = "pdf", "application/pdf", export_to_pdf
     else:
-        output_path = os.path.join(EXPORT_DIR, f"{safe_name}_{timestamp}.xlsx")
-        export_to_excel(project_name, inputs, results, output_path, quantity_curve=quantity_curve)
-        return FileResponse(
-            output_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=f"{safe_name}.xlsx",
+        ext, media_type, export = (
+            "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", export_to_excel
         )
+
+    # Build in a throwaway temp dir (the only writable place on Vercel) and stream the bytes back
+    with tempfile.TemporaryDirectory() as tmp:
+        output_path = os.path.join(tmp, f"{safe_name}.{ext}")
+        export(project_name, inputs, results, output_path, quantity_curve=quantity_curve)
+        if not os.path.exists(output_path):
+            raise HTTPException(status_code=500, detail=f"Could not generate the {ext.upper()} report.")
+        with open(output_path, "rb") as f:
+            content = f.read()
+
+    return Response(
+        content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.{ext}"'},
+    )
 
 
 @app.post("/api/export")
@@ -679,33 +677,5 @@ def export_project(project_id: int, format: str = "excel", db: Session = Depends
         quantity_curve = inputs.pop("quantity_curve", None)
     except Exception:
         inputs, results, quantity_curve = {}, {}, None
+    inputs["part_snapshot"] = p.part_snapshot
     return _do_export(p.name, inputs, results, format, quantity_curve)
-
-
-# ============================================================
-# Settings Routes
-# ============================================================
-
-class SettingUpdate(BaseModel):
-    key: str
-    value: str
-
-
-@app.get("/api/settings")
-def get_settings(db: Session = Depends(get_db)):
-    settings = db.query(models.Settings).all()
-    return {s.key: s.value for s in settings}
-
-
-@app.post("/api/settings")
-def update_setting(setting: SettingUpdate, db: Session = Depends(get_db)):
-    db_setting = db.query(models.Settings).filter(
-        models.Settings.key == setting.key
-    ).first()
-    if db_setting:
-        db_setting.value = setting.value
-    else:
-        db_setting = models.Settings(key=setting.key, value=setting.value)
-        db.add(db_setting)
-    db.commit()
-    return {"ok": True}

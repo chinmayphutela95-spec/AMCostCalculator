@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, Cpu, AlertCircle, Copy } from 'lucide-react'
-import { machinesApi } from '../lib/api'
+import { Plus, Pencil, Trash2, X, Cpu, AlertCircle, Copy, Lock } from 'lucide-react'
+import { machinesApi, apiErrorMessage } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { formatCurrency } from '../lib/utils'
 import type { Machine } from '../types'
 
@@ -44,6 +45,7 @@ export function MachinesPage() {
   const [editing, setEditing] = useState<Partial<Machine>>(DEFAULT_MACHINE)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const canEdit = !!useAuth().me?.is_admin   // the library is admin-managed
 
   const load = () => machinesApi.list().then(setMachines).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
@@ -58,12 +60,15 @@ export function MachinesPage() {
       if (editingId) await machinesApi.update(editingId, editing)
       else await machinesApi.create(editing)
       setShowModal(false); load()
+    } catch (e) {
+      alert(apiErrorMessage(e, 'Could not save the machine'))
     } finally { setSaving(false) }
   }
 
   const del = async (m: Machine) => {
     if (!confirm(`Delete "${m.name}"?`)) return
-    await machinesApi.delete(m.id); load()
+    try { await machinesApi.delete(m.id); load() }
+    catch (e) { alert(apiErrorMessage(e, 'Could not delete the machine')) }
   }
 
   const set = (key: string, val: any) => setEditing(e => ({ ...e, [key]: val }))
@@ -75,7 +80,11 @@ export function MachinesPage() {
           <h1 className="text-2xl font-bold text-text-primary">Machines</h1>
           <p className="text-text-secondary mt-1">{machines.length} LPBF machines configured</p>
         </div>
-        <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Machine</button>
+        {canEdit ? (
+          <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Machine</button>
+        ) : (
+          <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · managed by admins</span>
+        )}
       </div>
 
       {loading ? <div className="text-center py-20 text-text-muted">Loading...</div> : (
@@ -112,11 +121,13 @@ export function MachinesPage() {
                   <td className="px-4 py-3 text-right text-text-primary font-mono text-xs">{formatCurrency(m.machine_cost)}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono text-xs">${m.inert_gas_cost}/hr</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
-                      <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
-                      <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1 justify-end">
+                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
+                        <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
+                        <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

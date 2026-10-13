@@ -6,7 +6,7 @@ import { OrbitControls, Grid, Html } from '@react-three/drei'
 // @ts-ignore
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import * as THREE from 'three'
-import { geometryApi } from '../../../lib/api'
+import { analyzeStl } from '../../../lib/geometry'
 import type { AnalysisState } from '../../../types'
 
 // ─── Three.js scene components ────────────────────────────────────────────────
@@ -301,6 +301,30 @@ function AutoCamera({ geometry, buildAxis, elevationMm }: { geometry: THREE.Buff
   return null
 }
 
+/** Lets PartStep grab a JPEG of the current view for the PDF report. */
+function SnapshotCapture({ captureRef }: { captureRef: React.MutableRefObject<(() => string) | null> }) {
+  const { gl, scene, camera } = useThree()
+
+  useEffect(() => {
+    captureRef.current = () => {
+      gl.render(scene, camera)  // draw now: the WebGL buffer is only readable in the same task
+      const src = gl.domElement
+      const scale = Math.min(1, 1200 / src.width)
+      const out = document.createElement('canvas')
+      out.width = Math.round(src.width * scale)
+      out.height = Math.round(src.height * scale)
+      const ctx = out.getContext('2d')!
+      ctx.fillStyle = '#0d1117'  // viewer background (bg-secondary); the WebGL canvas is transparent
+      ctx.fillRect(0, 0, out.width, out.height)
+      ctx.drawImage(src, 0, 0, out.width, out.height)
+      return out.toDataURL('image/jpeg', 0.85)
+    }
+    return () => { captureRef.current = null }
+  }, [gl, scene, camera, captureRef])
+
+  return null
+}
+
 function StlScene({ geometry, overhangAngle, elevationMm, showSupportVolume }: {
   geometry: THREE.BufferGeometry
   overhangAngle: number
@@ -429,30 +453,29 @@ export function PartStep({ state, update, onNext }: Props) {
   const fileRef = useRef<File | null>(null)
   const loaderRef = useRef(new STLLoader())
   const loadCounterRef = useRef(0) // incremented on each load; stale completions are discarded
-  // Server's estimated_support_pct (0–100, overhang only — elevation added on top)
-  const serverPctRef = useRef(0)
+  const captureRef = useRef<(() => string) | null>(null) // set by <SnapshotCapture> while the viewer is shown
+  // Analysis's estimated_support_pct (0–100, overhang only — elevation added on top)
+  const overhangPctRef = useRef(0)
 
-  // ── Elevation contribution (client-side, no server needed) ────────────────
+  // ── Elevation contribution (no re-analysis needed) ────────────────────────
   // Elevation pillar is support structure at fillDensity, not solid — multiply by fillDensity
-  // to match the same convention as estimate_support_volume on the server.
+  // to match the same convention as the overhang support estimate.
   const elevationPct = useCallback((projAreaCm2: number, volCm3: number, elevMm: number) => {
     if (volCm3 <= 0 || projAreaCm2 <= 0) return 0
     return (projAreaCm2 * (elevMm / 10) * fillDensity) / volCm3 * 100
   }, [fillDensity])
 
-  // ── Server parse ──────────────────────────────────────────────────────────
-  const parseOnServer = useCallback(async (file: File, direction: string, angle = 45, density = 0.3) => {
+  // ── Geometry analysis (in a Web Worker — the STL never leaves the browser) ─
+  const runAnalysis = useCallback(async (file: File, direction: string, angle = 45, density = 0.3) => {
     setParsing(true)
     setParseError('')
     try {
-      const result = await geometryApi.parse(file, direction, angle, density)
-      if (!result.success) { setParseError(result.error || 'Failed to parse'); return }
-      serverPctRef.current = result.estimated_support_pct
+      const result = await analyzeStl(file, direction, angle, density)
+      overhangPctRef.current = result.estimated_support_pct
       const elevPct = elevationPct(result.projected_area_cm2, result.volume_cm3, 0)
       update({
         geometry: result,
         partFileName: result.file_name ?? file.name,
-        partFilePath: result.file_path,
         partVolume: result.volume_cm3,
         partHeight: result.height_cm,
         partProjectedArea: result.projected_area_cm2,
@@ -490,7 +513,7 @@ export function PartStep({ state, update, onNext }: Props) {
     })
   }, [])
 
-  // ── On file drop — load viewer only; user clicks Analyze to run server parse ─
+  // ── On file drop — load viewer only; user clicks Analyze to run the analysis ─
   const onDrop = useCallback((files: File[]) => {
     const file = files[0]
     if (!file) return
@@ -499,7 +522,7 @@ export function PartStep({ state, update, onNext }: Props) {
     setAnalysisReady(false)
     analysisReadyRef.current = false
     setSettingsDirty(false)
-    update({ geometry: undefined, partVolume: 0, partHeight: 0, partProjectedArea: 0, supportPctOfMass: 0.10 })
+    update({ geometry: undefined, partSnapshot: undefined, partVolume: 0, partHeight: 0, partProjectedArea: 0, supportPctOfMass: 0.10 })
   }, [state.buildDirection, loadViewer, update])
 
   // ── Re-orient viewer when build direction changes; mark dirty if already analyzed ──
@@ -527,18 +550,25 @@ export function PartStep({ state, update, onNext }: Props) {
     update({ elevationMm: clamped })
     if (analysisReadyRef.current) {
       setSettingsDirty(true)
-      // Elevation is client-only — update support % immediately from cached server pct
+      // Elevation doesn't need re-analysis — update support % immediately from the cached overhang pct
       if (state.partVolume > 0 && state.partProjectedArea > 0) {
         const elevPct = elevationPct(state.partProjectedArea, state.partVolume, clamped)
-        update({ supportPctOfMass: Math.min((serverPctRef.current + elevPct) / 100, 0.80) })
+        update({ supportPctOfMass: Math.min((overhangPctRef.current + elevPct) / 100, 0.80) })
       }
     }
   }, [state.partVolume, state.partProjectedArea, elevationPct, update])
 
   const handleAnalyze = useCallback(async () => {
     if (!fileRef.current) return
-    await parseOnServer(fileRef.current, state.buildDirection, overhangAngle, fillDensity)
-  }, [parseOnServer, state.buildDirection, overhangAngle, fillDensity])
+    await runAnalysis(fileRef.current, state.buildDirection, overhangAngle, fillDensity)
+  }, [runAnalysis, state.buildDirection, overhangAngle, fillDensity])
+
+  // Keep the current 3D view (as oriented by the user) for the PDF report
+  const handleContinue = () => {
+    const snapshot = captureRef.current?.()
+    if (snapshot) update({ partSnapshot: snapshot })
+    onNext()
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -880,6 +910,7 @@ export function PartStep({ state, update, onNext }: Props) {
                     elevationMm={state.elevationMm ?? 0}
                     showSupportVolume={showSupportVolume}
                   />
+                  <SnapshotCapture captureRef={captureRef} />
                 </Suspense>
               </Canvas>
             ) : (
@@ -913,9 +944,15 @@ export function PartStep({ state, update, onNext }: Props) {
                 Geometry Parsed · {state.geometry.face_count.toLocaleString()} faces
               </span>
             </div>
-            <span className={`badge text-xs ${state.geometry.is_watertight ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>
-              {state.geometry.is_watertight ? 'Watertight mesh' : 'Open mesh'}
-            </span>
+            {state.geometry.is_watertight === null ? (
+              <span className="badge text-xs bg-bg-subtle text-text-muted" title="Mesh check is skipped for very large files">
+                Watertight check skipped
+              </span>
+            ) : (
+              <span className={`badge text-xs ${state.geometry.is_watertight ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>
+                {state.geometry.is_watertight ? 'Watertight mesh' : 'Open mesh'}
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-4 gap-2 text-xs">
             {[
@@ -1047,7 +1084,7 @@ export function PartStep({ state, update, onNext }: Props) {
       </div>
 
       <div className="flex justify-end pt-4 border-t border-bg-border">
-        <button onClick={onNext} disabled={!canProceed} className="btn-primary">
+        <button onClick={handleContinue} disabled={!canProceed} className="btn-primary">
           Continue to Machine <ChevronRight size={16} />
         </button>
       </div>

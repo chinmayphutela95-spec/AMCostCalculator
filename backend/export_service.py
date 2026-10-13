@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from typing import Optional
 
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _c(v) -> str:
@@ -169,171 +168,15 @@ def _make_line_chart(quantity_curve, current_qty=None, figsize=(9, 3.8)):
     return buf.read()
 
 
-# ─── STL 3-D snapshot ─────────────────────────────────────────────────────────
+# ─── Part snapshot (captured from the browser's 3D viewer) ────────────────────
 
-def _render_stl_snapshot(
-    file_path: str,
-    build_direction: str = "z",
-    overhang_angle: float = 45.0,
-    figsize=(9.0, 4.2),
-) -> Optional[bytes]:
-    """Render STL as a 3-D matplotlib snapshot with overhang highlighting.
-
-    Returns PNG bytes or None if the file is missing / rendering fails.
-    """
+def _decode_snapshot(data_url) -> Optional[bytes]:
+    """Return image bytes from a data:image/...;base64 URL, or None if absent/invalid."""
+    import base64
+    if not isinstance(data_url, str) or not data_url.startswith("data:image/") or "," not in data_url:
+        return None
     try:
-        import sys, types, math
-
-        # trimesh may need a networkx stub on minimal installs
-        try:
-            import networkx  # noqa: F401
-        except ModuleNotFoundError:
-            _nx = types.ModuleType("networkx")
-            sys.modules["networkx"] = _nx
-
-        import trimesh
-        import numpy as np
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-        from matplotlib.patches import Patch
-
-        if not os.path.exists(file_path):
-            return None
-
-        # ── Load mesh ─────────────────────────────────────────────────────────
-        loaded = trimesh.load(file_path, force="mesh")
-        if isinstance(loaded, trimesh.Scene):
-            geoms = list(loaded.geometry.values())
-            if not geoms:
-                return None
-            mesh = trimesh.util.concatenate(geoms) if len(geoms) > 1 else geoms[0]
-        else:
-            mesh = loaded
-
-        if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
-            return None
-
-        # ── Overhang detection ────────────────────────────────────────────────
-        axis_map = {"x": 0, "y": 1, "z": 2}
-        build_axis = axis_map.get(build_direction.lower(), 2)
-        build_vec = np.zeros(3)
-        build_vec[build_axis] = 1.0
-
-        verts   = np.asarray(mesh.vertices, dtype=float)
-        faces   = np.asarray(mesh.faces,    dtype=int)
-        normals = np.asarray(mesh.face_normals, dtype=float)
-        dots    = normals @ build_vec
-        threshold    = -math.cos(math.radians(overhang_angle))
-        is_overhang  = dots < threshold
-
-        normal_faces   = faces[~is_overhang]
-        overhang_faces = faces[is_overhang]
-
-        # Sub-sample for rendering performance (matplotlib painter's limit)
-        RENDER_LIMIT = 4000
-        rng = np.random.default_rng(42)
-
-        def _sub(fa, n):
-            if len(fa) <= n:
-                return fa
-            return fa[rng.choice(len(fa), n, replace=False)]
-
-        normal_r   = _sub(normal_faces,   RENDER_LIMIT)
-        overhang_r = _sub(overhang_faces, min(RENDER_LIMIT, max(1, len(overhang_faces))))
-
-        # ── Bounding box ──────────────────────────────────────────────────────
-        mins    = verts.min(axis=0)
-        maxs    = verts.max(axis=0)
-        extents = maxs - mins
-        corners = np.array([
-            [mins[0], mins[1], mins[2]], [maxs[0], mins[1], mins[2]],
-            [maxs[0], maxs[1], mins[2]], [mins[0], maxs[1], mins[2]],
-            [mins[0], mins[1], maxs[2]], [maxs[0], mins[1], maxs[2]],
-            [maxs[0], maxs[1], maxs[2]], [mins[0], maxs[1], maxs[2]],
-        ])
-        bbox_edges = [
-            (0,1),(1,2),(2,3),(3,0),
-            (4,5),(5,6),(6,7),(7,4),
-            (0,4),(1,5),(2,6),(3,7),
-        ]
-
-        # ── Figure ────────────────────────────────────────────────────────────
-        fig = plt.figure(figsize=figsize, facecolor="white")
-        ax  = fig.add_subplot(111, projection="3d")
-        ax.set_facecolor("white")
-
-        if len(normal_r) > 0:
-            pc = Poly3DCollection(verts[normal_r], alpha=0.70, linewidths=0)
-            pc.set_facecolor("#2563EB")
-            ax.add_collection3d(pc)
-
-        if len(overhang_r) > 0:
-            pc2 = Poly3DCollection(verts[overhang_r], alpha=0.90, linewidths=0)
-            pc2.set_facecolor("#DC2626")
-            ax.add_collection3d(pc2)
-
-        for a, b in bbox_edges:
-            ax.plot3D(*zip(corners[a], corners[b]),
-                      color="#D97706", linewidth=0.8, linestyle="--", alpha=0.85)
-
-        # Build plate surface
-        pm = max(extents[0], extents[1]) * 0.10
-        xs = np.array([[mins[0]-pm, maxs[0]+pm], [mins[0]-pm, maxs[0]+pm]])
-        ys = np.array([[mins[1]-pm, mins[1]-pm], [maxs[1]+pm, maxs[1]+pm]])
-        zs = np.full_like(xs, mins[2])
-        ax.plot_surface(xs, ys, zs, alpha=0.15, color="#0891B2", linewidth=0)
-
-        # Build-direction arrow
-        ctr   = (mins + maxs) / 2
-        arrow = extents[build_axis] * 0.45 * build_vec
-        ax.quiver(*ctr, *arrow, color="#059669", linewidth=1.8, arrow_length_ratio=0.22)
-
-        # ── Axes / limits ─────────────────────────────────────────────────────
-        pad = max(extents) * 0.04
-        ax.set_xlim(mins[0] - pad, maxs[0] + pad)
-        ax.set_ylim(mins[1] - pad, maxs[1] + pad)
-        ax.set_zlim(mins[2],       maxs[2] + extents[build_axis] * 0.55)
-
-        ax.tick_params(colors="#64748B", labelsize=6)
-        ax.set_xlabel("X (mm)", color="#64748B", fontsize=6.5, labelpad=1)
-        ax.set_ylabel("Y (mm)", color="#64748B", fontsize=6.5, labelpad=1)
-        bax = "XYZ"[build_axis]
-        ax.set_zlabel(f"{bax} / Build (mm)", color="#64748B", fontsize=6.5, labelpad=1)
-        for pane in [ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane]:
-            pane.fill = False
-            pane.set_edgecolor("#E2E8F0")
-
-        n_overhang = int(is_overhang.sum())
-        pct_overhang = n_overhang / max(len(faces), 1) * 100
-        ax.set_title(
-            f"Bounding box: {extents[0]:.1f} × {extents[1]:.1f} × {extents[2]:.1f} mm"
-            f"   |   Build: +{bax}"
-            f"   |   Overhang faces: {n_overhang} ({pct_overhang:.1f}%)",
-            color="#334155", fontsize=7.5, pad=6,
-        )
-
-        legend_handles = [
-            Patch(facecolor="#2563EB", label="Nominal surface"),
-            Patch(facecolor="#DC2626", label=f"Overhang (>{overhang_angle:.0f}°)"),
-            Patch(facecolor="#0891B2", alpha=0.5, label="Build plate"),
-            Patch(facecolor="#059669", label=f"Build dir. (+{bax})"),
-        ]
-        ax.legend(handles=legend_handles, loc="upper left", fontsize=6.5,
-                  frameon=True, framealpha=0.8, edgecolor="#E2E8F0",
-                  labelcolor="#334155", borderpad=0.3, handlelength=1.2)
-
-        ax.view_init(elev=22, azim=40)
-
-        plt.tight_layout(pad=0.4)
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor(),
-                    bbox_inches="tight")
-        plt.close(fig)
-        buf.seek(0)
-        return buf.read()
-
+        return base64.b64decode(data_url.split(",", 1)[1], validate=True)
     except Exception:
         return None
 
@@ -1107,19 +950,22 @@ def export_to_pdf(
         story.append(Spacer(1, 14))
 
         # ═════════════════════════════════════════════════════════════════════
-        # STL GEOMETRY SNAPSHOT (optional — only if file is still on disk)
+        # PART SNAPSHOT (optional — captured from the 3D viewer in the browser)
         # ═════════════════════════════════════════════════════════════════════
-        stl_path = inputs.get("part_file_path") or inputs.get("file_path")
-        build_dir = inputs.get("build_direction", "z") or "z"
-        if stl_path:
-            STL_FS = (9.0, 4.2)   # figsize (inches)
-            stl_png = _render_stl_snapshot(stl_path, build_direction=build_dir,
-                                           overhang_angle=45.0, figsize=STL_FS)
-            if stl_png:
+        snapshot = _decode_snapshot(inputs.get("part_snapshot"))
+        if snapshot:
+            from PIL import Image as PILImage
+            try:
+                px_w, px_h = PILImage.open(io.BytesIO(snapshot)).size
+            except Exception:
+                px_w = px_h = 0
+            if px_w and px_h:
                 story.append(_sec_hdr("Part Geometry — 3D View · Overhangs · Bounding Box"))
                 story.append(Spacer(1, 6))
 
-                stl_im = _chart_img(stl_png, COL_W - 8, *STL_FS)
+                # Fit inside the column width and a max height, keeping aspect ratio
+                scale = min((COL_W - 8) / px_w, 8.5 * cm / px_h)
+                stl_im = RLImage(io.BytesIO(snapshot), width=px_w * scale, height=px_h * scale)
                 stl_tbl = Table([[stl_im]], colWidths=[COL_W])
                 stl_tbl.setStyle(TableStyle([
                     ('BACKGROUND',   (0, 0), (-1, -1), WHITE),

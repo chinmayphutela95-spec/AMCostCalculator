@@ -199,7 +199,6 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
       material_build_rate_cm3_hr: state.materialBuildRate,
       // Part geometry
       part_file_name: state.partFileName,
-      part_file_path: state.geometry?.file_path,
       part_volume_cm3: state.partVolume,
       part_height_cm: state.partHeight,
       part_projected_area_cm2: state.partProjectedArea,
@@ -240,6 +239,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
         }),
         results_json: JSON.stringify(state.result),
         ai_insights_json: JSON.stringify(state.aiInsights || {}),
+        part_snapshot: state.partSnapshot,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
@@ -251,7 +251,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
     try {
       const resp = await exportApi.export({
         project_name: projectName || 'cost_analysis',
-        inputs: buildInputsPayload(),
+        inputs: { ...buildInputsPayload(), part_snapshot: state.partSnapshot },
         results: state.result,
         format,
         quantity_curve: state.quantityCurve,
@@ -548,7 +548,7 @@ export function ResultsStep({ state, update, onBack, onReset }: Props) {
           <div className="text-center py-8 text-text-muted text-sm">
             <Brain size={32} className="mx-auto mb-3 opacity-40" />
             Click "Get AI Analysis" for manufacturing insights, DfAM recommendations, and AM vs conventional comparison.
-            <p className="text-xs mt-1">Requires Claude API key in Settings.</p>
+            <p className="text-xs mt-1">Requires the Anthropic API key to be configured on the server.</p>
           </div>
         )}
 

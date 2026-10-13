@@ -67,9 +67,7 @@ export interface Material {
 export interface PartGeometry {
   success: boolean
   error?: string
-  file_id?: string
   file_name?: string
-  file_path?: string
   volume_cm3: number
   height_cm: number
   projected_area_cm2: number
@@ -80,9 +78,9 @@ export interface PartGeometry {
   support_area_cm2: number
   estimated_support_pct: number
   face_count: number
-  vertex_count: number
+  vertex_count: number | null    // null: skipped for very large meshes
   build_direction: string
-  is_watertight: boolean
+  is_watertight: boolean | null  // null: skipped for very large meshes
 }
 
 export interface CostResult {
@@ -147,9 +145,22 @@ export interface Project {
   created_at: string
   updated_at: string
   part_file_name?: string
-  inputs_json: string
   results_json: string
-  ai_insights_json: string
+  created_by?: string | null
+  created_by_email?: string | null
+  // Only on the full record (GET /api/projects/:id), not in the list
+  inputs_json?: string
+  ai_insights_json?: string
+}
+
+/** The signed-in user, from GET /api/me */
+export interface Me {
+  id: string | null
+  email: string
+  is_admin: boolean
+  auth_enabled: boolean
+  ai_enabled: boolean
+  database: 'postgres' | 'sqlite'
 }
 
 export interface AnalysisState {
@@ -160,8 +171,8 @@ export interface AnalysisState {
   partProjectedArea: number
   supportPctOfMass: number
   buildDirection: string
-  partFilePath?: string
   partFileName?: string
+  partSnapshot?: string    // JPEG data URL of the 3D viewer, for the PDF report
   geometry?: PartGeometry
 
   // Production

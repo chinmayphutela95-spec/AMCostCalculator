@@ -1,6 +1,27 @@
 import axios from 'axios'
+import { supabase } from './supabase'
+import type { Me } from '../types'
 
 const api = axios.create({ baseURL: '/api' })
+
+// Attach the signed-in user's access token (refreshed by supabase-js when it expires)
+api.interceptors.request.use(async config => {
+  if (supabase) {
+    const { data } = await supabase.auth.getSession()
+    if (data.session) config.headers.Authorization = `Bearer ${data.session.access_token}`
+  }
+  return config
+})
+
+// Session rejected by the server → back to the sign-in screen
+api.interceptors.response.use(undefined, async error => {
+  if (error.response?.status === 401 && supabase) await supabase.auth.signOut()
+  return Promise.reject(error)
+})
+
+export const meApi = {
+  get: (): Promise<Me> => api.get('/me').then(r => r.data),
+}
 
 export const machinesApi = {
   list: () => api.get('/machines').then(r => r.data),
@@ -16,27 +37,6 @@ export const materialsApi = {
   create: (data: any) => api.post('/materials', data).then(r => r.data),
   update: (id: number, data: any) => api.put(`/materials/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/materials/${id}`).then(r => r.data),
-}
-
-export const geometryApi = {
-  parse: (file: File, buildDirection: string, overhangAngle = 45, fillDensity = 0.3) => {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('build_direction', buildDirection)
-    form.append('overhang_angle', String(overhangAngle))
-    form.append('fill_density', String(fillDensity))
-    return api.post('/geometry/parse', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then(r => r.data)
-  },
-  reanalyze: (filePath: string, buildDirection: string, overhangAngle: number, fillDensity: number) => {
-    const form = new FormData()
-    form.append('file_path', filePath)
-    form.append('build_direction', buildDirection)
-    form.append('overhang_angle', String(overhangAngle))
-    form.append('fill_density', String(fillDensity))
-    return api.post('/geometry/reanalyze', form).then(r => r.data)
-  },
 }
 
 export const analysisApi = {
@@ -55,15 +55,16 @@ export const aiApi = {
   analyze: (data: any) => api.post('/ai/analyze', data).then(r => r.data),
 }
 
-export const settingsApi = {
-  get: () => api.get('/settings').then(r => r.data),
-  set: (key: string, value: string) => api.post('/settings', { key, value }).then(r => r.data),
-}
-
 export const exportApi = {
   export: (data: any) => api.post('/export', data, { responseType: 'blob' }).then(r => r),
   exportProject: (id: number, format: 'excel' | 'pdf') =>
     api.get(`/projects/${id}/export`, { params: { format }, responseType: 'blob' }).then(r => r),
+}
+
+/** Human-readable message from an API error (FastAPI puts it in `detail`). */
+export function apiErrorMessage(e: any, fallback = 'Something went wrong'): string {
+  const detail = e?.response?.data?.detail
+  return typeof detail === 'string' ? detail : e?.message || fallback
 }
 
 export default api

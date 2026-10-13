@@ -1,6 +1,11 @@
 from database import Base
-from sqlalchemy import Column, Integer, Float, String, Boolean, Text, DateTime
-from datetime import datetime
+from sqlalchemy import Column, Integer, Float, String, Boolean, Text, DateTime, Uuid
+from sqlalchemy.orm import deferred
+from datetime import datetime, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Machine(Base):
@@ -54,7 +59,7 @@ class Machine(Base):
     salary_technician = Column(Float, default=30.0)   # $/hr
     is_custom = Column(Boolean, default=False)
     notes = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Material(Base):
@@ -77,7 +82,7 @@ class Material(Base):
     max_service_temp = Column(Float, nullable=True)    # °C
     is_custom = Column(Boolean, default=False)
     notes = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Project(Base):
@@ -85,16 +90,22 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     description = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     part_file_name = Column(String, nullable=True)
     inputs_json = Column(Text, default="{}")
     results_json = Column(Text, default="{}")
     ai_insights_json = Column(Text, default="{}")
+    # 3D viewer capture (data: URL) for the PDF export — deferred so project lists stay small
+    part_snapshot = deferred(Column(Text, nullable=True))
+    created_by = Column(Uuid(as_uuid=False), nullable=True)      # Supabase auth user id
+    created_by_email = Column(String, nullable=True)
 
 
-class Settings(Base):
-    __tablename__ = "settings"
-    id = Column(Integer, primary_key=True, index=True)
-    key = Column(String, unique=True)
-    value = Column(Text, default="")
+class Profile(Base):
+    """One row per Supabase user (filled by a trigger on auth.users — see supabase/schema.sql)."""
+    __tablename__ = "profiles"
+    id = Column(Uuid(as_uuid=False), primary_key=True)
+    email = Column(String, default="")
+    is_admin = Column(Boolean, default=False)   # admins manage the machine/material library
+    created_at = Column(DateTime, default=_utcnow)

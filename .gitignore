@@ -15,6 +15,7 @@ env/
 
 # Database & uploads (runtime data — not committed)
 backend/metal_am_cost.db
+backend/metal_am_cost.db.*
 backend/uploads/
 backend/exports/
 
@@ -44,3 +45,6 @@ npm-debug.log*
 .env
 .env.local
 .env.production
+
+# Data export for the one-time Supabase import (contains project data)
+backend/supabase_import.sql

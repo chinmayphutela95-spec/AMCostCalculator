@@ -1,0 +1,14 @@
+# Keep local-only data out of `vercel deploy` uploads (Git deploys skip these anyway)
+backend/venv
+backend/uploads
+backend/exports
+backend/.env
+backend/*.db
+backend/*.db.*
+**/__pycache__
+frontend/node_modules
+frontend/dist
+frontend/.env*
+*.bat
+docs
+MITCostModel.xlsx

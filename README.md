@@ -2,12 +2,14 @@
 
 A full-stack web application for estimating the cost of **Laser Powder Bed Fusion (LPBF / SLM)** metal additive manufacturing. Built on an MIT-derived cost model, it walks users through a step-by-step wizard to configure the part, machine, material, and process parameters, then delivers a detailed cost breakdown with charts, quantity curves, and AI-powered insights.
 
+> **Shared team website:** the app can be deployed to Vercel with a Supabase database and sign-in — see **[DEPLOY.md](DEPLOY.md)**. The instructions below are for running it locally.
+
 ---
 
 ## Features
 
 - **5-step analysis wizard** — Part → Machine → Material → Process → Results
-- **STL file upload & 3D viewer** — Automatic geometry extraction (volume, height, projected area, bounding box, overhang analysis)
+- **STL file upload & 3D viewer** — Automatic geometry extraction (volume, height, projected area, bounding box, overhang analysis), computed in the browser so part files are never uploaded
 - **Dynamic overhang/support estimation** — Interactive angle slider updates support % proportionally
 - **Material-driven build rate** — Layer thickness (µm) and build rate (cm³/hr) defined per material, not machine
 - **Multi-laser configuration** — For machines with multiple lasers, choose single / multi-laser per part / parallel zones strategy; live effective build rate preview
@@ -28,8 +30,9 @@ A full-stack web application for estimating the cost of **Laser Powder Bed Fusio
 | 3D Viewer | React Three Fiber, Three.js, @react-three/drei |
 | Charts | Recharts |
 | Backend | FastAPI, Python 3.11+ |
-| Database | SQLite via SQLAlchemy |
-| STL parsing | trimesh + numpy/scipy |
+| Database | SQLite (local) or Supabase Postgres (shared), via SQLAlchemy |
+| Sign-in | Supabase Auth (shared deployment only) |
+| STL parsing | TypeScript in a Web Worker (in the browser) |
 | AI | Anthropic Claude API |
 | Export | openpyxl (Excel), ReportLab (PDF) |
 
@@ -118,7 +121,7 @@ Create a `.env` file in the `backend/` directory (optional):
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
-Without this key, the AI Insights section will show an error but all cost calculations work normally.
+Without this key, the AI Insights section will show an error but all cost calculations work normally. See `backend/.env.example` for the optional Supabase settings used by the shared deployment.
 
 ---
 
@@ -130,11 +133,12 @@ AMCostCalculator/
 │   ├── main.py               # FastAPI app, all API routes
 │   ├── models.py             # SQLAlchemy ORM models (Machine, Material, Project)
 │   ├── cost_calculator.py    # Core cost calculation engine (MIT model)
-│   ├── geometry_parser.py    # STL parsing, overhang detection, support estimation
+│   ├── auth.py               # Supabase sign-in check, admin role
 │   ├── ai_insights.py        # Claude API integration for DfAM insights
 │   ├── export_service.py     # Excel / PDF export
 │   ├── database.py           # DB session setup
 │   ├── seed_data.py          # Pre-seeded machines & materials
+│   ├── migrate_to_supabase.py # One-time copy of the local database to Supabase
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
@@ -153,10 +157,15 @@ AMCostCalculator/
 │       │   └── Dashboard.tsx
 │       ├── lib/
 │       │   ├── api.ts                    # Axios API client
+│       │   ├── auth.tsx / supabase.ts    # Sign-in (shared deployment)
+│       │   └── geometry/                 # STL parsing, overhang detection, support estimation
 │       │   └── utils.ts
 │       └── types/
 │           └── index.ts                  # TypeScript interfaces
+├── supabase/schema.sql                   # Database schema for the shared deployment
+├── vercel.json                           # Vercel deployment config
 ├── start.sh                              # One-command launcher (macOS)
+├── DEPLOY.md
 └── README.md
 ```
 
@@ -209,6 +218,7 @@ total_print_time     = production_run × part_volume / effective_build_rate
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/api/me` | Signed-in user, admin flag, server capabilities |
 | GET | `/api/machines` | List all machines |
 | POST | `/api/machines` | Create machine |
 | PUT | `/api/machines/{id}` | Update machine |
@@ -218,7 +228,6 @@ total_print_time     = production_run × part_volume / effective_build_rate
 | PUT | `/api/materials/{id}` | Update material |
 | DELETE | `/api/materials/{id}` | Delete material |
 | POST | `/api/analysis/calculate` | Run cost calculation |
-| POST | `/api/geometry/parse` | Parse uploaded STL file |
 | POST | `/api/ai/analyze` | Get AI insights (requires API key) |
 | GET | `/api/projects` | List saved projects |
 | POST | `/api/projects` | Save project |

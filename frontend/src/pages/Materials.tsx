@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, FlaskConical, Copy } from 'lucide-react'
-import { materialsApi } from '../lib/api'
+import { Plus, Pencil, Trash2, X, FlaskConical, Copy, Lock } from 'lucide-react'
+import { materialsApi, apiErrorMessage } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import type { Material } from '../types'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -46,6 +47,7 @@ export function MaterialsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('')
+  const canEdit = !!useAuth().me?.is_admin   // the library is admin-managed
 
   const load = () => materialsApi.list().then(setMaterials).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
@@ -60,12 +62,15 @@ export function MaterialsPage() {
       if (editingId) await materialsApi.update(editingId, editing)
       else await materialsApi.create(editing)
       setShowModal(false); load()
+    } catch (e) {
+      alert(apiErrorMessage(e, 'Could not save the material'))
     } finally { setSaving(false) }
   }
 
   const del = async (m: Material) => {
     if (!confirm(`Delete "${m.name}"?`)) return
-    await materialsApi.delete(m.id); load()
+    try { await materialsApi.delete(m.id); load() }
+    catch (e) { alert(apiErrorMessage(e, 'Could not delete the material')) }
   }
 
   const set = (k: string, v: any) => setEditing(e => ({ ...e, [k]: v }))
@@ -87,7 +92,11 @@ export function MaterialsPage() {
         </div>
         <div className="flex gap-3">
           <input className="input-field w-48" placeholder="Search..." value={filter} onChange={e => setFilter(e.target.value)} />
-          <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Material</button>
+          {canEdit ? (
+            <button onClick={openAdd} className="btn-primary"><Plus size={16} /> Add Material</button>
+          ) : (
+            <span className="text-text-muted text-xs flex items-center gap-1.5"><Lock size={12} /> Read-only · managed by admins</span>
+          )}
         </div>
       </div>
 
@@ -138,11 +147,13 @@ export function MaterialsPage() {
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.yield_strength ?? '–'}</td>
                   <td className="px-4 py-3 text-right text-text-secondary font-mono">{m.tensile_strength ?? '–'}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
-                      <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
-                      <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1 justify-end">
+                        <button onClick={() => openDuplicate(m)} title="Duplicate" className="text-text-muted hover:text-accent-cyan p-1.5 rounded transition-colors"><Copy size={13} /></button>
+                        <button onClick={() => openEdit(m)} title="Edit" className="text-text-muted hover:text-accent-blue p-1.5 rounded transition-colors"><Pencil size={13} /></button>
+                        <button onClick={() => del(m)} title="Delete" className="text-text-muted hover:text-danger p-1.5 rounded transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

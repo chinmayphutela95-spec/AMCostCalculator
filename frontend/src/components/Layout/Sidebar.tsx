@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, PlusCircle, Clock, Cpu, FlaskConical, Settings, Zap } from 'lucide-react'
+import { LayoutDashboard, PlusCircle, Clock, Cpu, FlaskConical, Settings, Zap, LogOut } from 'lucide-react'
+import { useAuth } from '../../lib/auth'
 
 const nav = [
   { to: '/',          icon: LayoutDashboard, label: 'Dashboard',    end: true },
@@ -11,6 +12,8 @@ const nav = [
 ]
 
 export function Sidebar() {
+  const { me, signOut } = useAuth()
+
   return (
     <aside className="w-60 shrink-0 flex flex-col h-screen sticky top-0 bg-bg-secondary border-r border-bg-border">
 
@@ -43,6 +46,19 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Signed-in user */}
+      {me?.auth_enabled && (
+        <div className="px-5 py-3 border-t border-bg-border flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-text-secondary text-xs font-medium truncate" title={me.email}>{me.email}</div>
+            <div className="text-text-muted text-xs">{me.is_admin ? 'Admin' : 'Member'}</div>
+          </div>
+          <button onClick={signOut} title="Sign out" className="text-text-muted hover:text-text-primary p-1.5 rounded transition-colors">
+            <LogOut size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-bg-border">

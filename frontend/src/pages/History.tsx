@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Trash2, FolderOpen, Clock, ChevronRight, X, Download } from 'lucide-react'
-import { projectsApi, exportApi } from '../lib/api'
+import { Trash2, FolderOpen, Clock, ChevronRight, X, Download, User } from 'lucide-react'
+import { projectsApi, exportApi, apiErrorMessage } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { formatCurrency } from '../lib/utils'
 import type { Project } from '../types'
 
@@ -8,14 +9,29 @@ export function HistoryPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Project | null>(null)
+  const { me } = useAuth()
 
   const load = () => projectsApi.list().then(setProjects).finally(() => setLoading(false))
 
   useEffect(() => { load() }, [])
 
+  // The list is a summary; fetch the full record (inputs, AI insights) for the detail panel
+  const select = (p: Project) => {
+    setSelected(p)
+    projectsApi.get(p.id).then(full => setSelected(s => (s?.id === p.id ? full : s))).catch(() => {})
+  }
+
+  // Projects are shared team-wide; only the creator or an admin may delete
+  const canDelete = (p: Project) => !!me && (me.is_admin || (!!p.created_by && p.created_by === me.id))
+
   const del = async (id: number) => {
     if (!confirm('Delete this project?')) return
-    await projectsApi.delete(id)
+    try {
+      await projectsApi.delete(id)
+    } catch (e) {
+      alert(apiErrorMessage(e, 'Could not delete the project'))
+      return
+    }
     load()
     if (selected?.id === id) setSelected(null)
   }
@@ -38,7 +54,9 @@ export function HistoryPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-text-primary">Saved Projects</h1>
-        <p className="text-text-secondary mt-1">{projects.length} saved cost analyses</p>
+        <p className="text-text-secondary mt-1">
+          {projects.length} saved cost analyses{me?.auth_enabled ? ' · shared with your team' : ''}
+        </p>
       </div>
 
       {loading ? (
@@ -61,7 +79,7 @@ export function HistoryPage() {
               return (
                 <div
                   key={p.id}
-                  onClick={() => setSelected(p)}
+                  onClick={() => select(p)}
                   className={`card cursor-pointer hover:border-accent-blue/50 transition-colors ${selected?.id === p.id ? 'border-accent-blue/50 bg-accent-blue/5' : ''}`}
                 >
                   <div className="flex items-start justify-between">
@@ -73,6 +91,7 @@ export function HistoryPage() {
                       {p.description && <p className="text-text-muted text-xs mt-1 truncate">{p.description}</p>}
                       <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
                         <span className="flex items-center gap-1"><Clock size={11} />{new Date(p.created_at).toLocaleDateString()}</span>
+                        {p.created_by_email && <span className="flex items-center gap-1 truncate"><User size={11} />{p.created_by_email}</span>}
                         {run && <span>{run}</span>}
                       </div>
                     </div>
@@ -83,9 +102,11 @@ export function HistoryPage() {
                           <div className="text-text-muted text-xs">per part</div>
                         </div>
                       )}
-                      <button onClick={e => { e.stopPropagation(); del(p.id) }} className="text-text-muted hover:text-danger transition-colors p-1">
-                        <Trash2 size={14} />
-                      </button>
+                      {canDelete(p) && (
+                        <button onClick={e => { e.stopPropagation(); del(p.id) }} className="text-text-muted hover:text-danger transition-colors p-1">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                       <ChevronRight size={14} className="text-text-muted" />
                     </div>
                   </div>
@@ -100,8 +121,8 @@ export function HistoryPage() {
             let inputs: any = {}
             let ai: any = {}
             try { results = JSON.parse(selected.results_json) } catch {}
-            try { inputs = JSON.parse(selected.inputs_json) } catch {}
-            try { ai = JSON.parse(selected.ai_insights_json) } catch {}
+            try { inputs = JSON.parse(selected.inputs_json ?? '{}') } catch {}
+            try { ai = JSON.parse(selected.ai_insights_json ?? '{}') } catch {}
             return (
               <div className="w-80 card h-fit">
                 <div className="flex items-center justify-between mb-4">
@@ -116,6 +137,7 @@ export function HistoryPage() {
                   <div className="flex justify-between"><span className="text-text-muted">Builds</span><span className="text-text-primary">{results.num_builds ?? '–'}</span></div>
                   {inputs.machine_name && <div className="flex justify-between"><span className="text-text-muted">Machine</span><span className="text-text-primary truncate ml-2">{inputs.machine_name}</span></div>}
                   {inputs.material_name && <div className="flex justify-between"><span className="text-text-muted">Material</span><span className="text-text-primary truncate ml-2">{inputs.material_name}</span></div>}
+                  {selected.created_by_email && <div className="flex justify-between"><span className="text-text-muted">Created by</span><span className="text-text-primary truncate ml-2">{selected.created_by_email}</span></div>}
                 </div>
                 <div className="mt-4 pt-4 border-t border-bg-border flex gap-2">
                   <button
